@@ -7,7 +7,7 @@ q005,Where can I check in?,find_check_in,{},,vague,clarify,dev,terminal unknown;
 q006,Check-in desks Terminal 2,find_check_in,"{""terminal"": ""Terminal 2""}",checkin_t2,precise,answer,dev,terminal entity resolves the record
 q007,Where is desk 145?,find_check_in,"{""desk_id"": ""DESK 145""}",checkin_t1,precise,answer,dev,desk range expansion 101-160
 q008,Where is security?,find_security,{},,vague,clarify,dev,three checkpoints; margin should be small
-q009,How long is the queue at security north?,find_security,"{""terminal"": ""Terminal 1""}",security_t1_north,ambiguous,answer,dev,DIFFICULT: location answerable; live queue time must be declared unavailable not invented
+q009,How long is the queue at security north?,find_security,{},security_t1_north,ambiguous,answer,dev,DIFFICULT: location answerable; live queue time must be declared unavailable not invented. Annotation corrected 12 Sep 2026: entities_json held the target terminal rather than a surface entity
 q010,Where do I pick up my suitcase?,find_baggage_reclaim,{},,paraphrase,clarify,dev,no terminal; two reclaim halls
 q011,Baggage claim terminal 1,find_baggage_reclaim,"{""terminal"": ""Terminal 1""}",baggage_reclaim_t1,precise,answer,dev,alias + terminal
 q012,Where is belt 8?,find_baggage_reclaim,"{""belt_id"": ""BELT 8""}",baggage_reclaim_t2,precise,answer,dev,belt identifier selects T2 without the word terminal
