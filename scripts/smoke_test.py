@@ -5,6 +5,7 @@ model weights. Exit code: 0 = all required imports OK, 1 = something missing.
 EasyOCR is checked only when configs.settings.SETTINGS.enable_ocr is True.
 """
 import importlib
+import importlib.metadata
 import platform
 import sys
 from pathlib import Path
@@ -19,7 +20,13 @@ REQUIRED = ["torch", "torchvision", "transformers", "sentence_transformers",
 def try_import(name: str):
     try:
         module = importlib.import_module(name)
-        return True, getattr(module, "__version__", "?")
+        version = getattr(module, "__version__", None)
+        if version is None:  # e.g. jiwer exposes no __version__ attribute
+            try:
+                version = importlib.metadata.version(name)
+            except importlib.metadata.PackageNotFoundError:
+                version = "?"
+        return True, version
     except Exception as exc:  # noqa: BLE001 - report anything, crash on nothing
         return False, f"{type(exc).__name__}: {exc}"
 
