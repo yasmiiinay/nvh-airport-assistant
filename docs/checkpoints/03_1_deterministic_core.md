@@ -201,14 +201,18 @@ None structural. Three housekeeping items fixed in this checkpoint:
 `scripts/smoke_test.py` now reports jiwer's version via
 `importlib.metadata`; the README's Space status was stale relative to the
 Foundation Report and now describes the live Space; the README carries the
-Space's YAML configuration so GitHub can be the single source.
+Space's YAML configuration so a plain `git push` to the Space deploys the
+committed code at Chat 05. A GitHub→Space auto-sync workflow was added and
+then removed on review: it would have forced the pinned-requirements build on
+ZeroGPU as a side effect of the first push, which is a Chat 05 question, not a
+03.1 one.
 
-Observation to carry, not a defect: the seed row for q009 records
-`entities_json = {"terminal": "Terminal 1"}` although the query text does
-not mention a terminal — the seed's entity annotation there encodes the
-target's terminal rather than a surface entity. Entity-accuracy scoring in
-03.2 should compare against surface entities only, or the row should be
-corrected on the dev split.
+Dev-set annotation correction (not an architecture change): the seed row
+for q009 recorded `entities_json = {"terminal": "Terminal 1"}` although the
+query text never mentions a terminal — the annotation encoded the target's
+terminal rather than a surface entity and would have penalised entity
+extraction unfairly. Corrected to `{}` on review, with the reason noted in the
+row; audit and tests re-run unchanged (ALL CHECKS PASS, 81 passed).
 
 ## 7. Recommendation for checkpoint 03.2
 

@@ -43,7 +43,6 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 | `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1 evidence). |
 | `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `retrieval.py` (deterministic cascade stages; semantic stages follow in checkpoint 03.2). |
 | `tests/` | Consistency gate plus unit tests per module (`python -m pytest tests`). |
-| `.github/workflows/` | `sync-to-hf.yml`: every push to `main` is mirrored to the Hugging Face Space (needs the `HF_TOKEN` repository secret). |
 
 ## Setup
 
@@ -90,11 +89,12 @@ selectable), and ZeroGPU's startup check requires at least one
 configuration (`app_file`, pinned `sdk_version`, `python_version: 3.12` so
 numpy installs from a wheel).
 
-**Source of truth is this GitHub repository.** The workflow in
-`.github/workflows/sync-to-hf.yml` force-pushes `main` to the Space on every
-push, so the Space always runs the committed code. Open question carried to
-Chat 05: whether the pinned `torch==2.9.1` installs cleanly over the ZeroGPU
-image's preinstalled torch — the first synced build answers it.
+**Source of truth is this GitHub repository.** The Space is updated by
+pushing `main` to it at deployment checkpoints (Chat 05), not automatically;
+the pinned `requirements.txt` has not yet been built on the ZeroGPU image,
+and that build is the first step of the final deployment, not a side effect
+of every commit. The YAML block above is what makes a plain `git push` to the
+Space deployable when that time comes.
 
 ## Running the deterministic core (checkpoint 03.1)
 
