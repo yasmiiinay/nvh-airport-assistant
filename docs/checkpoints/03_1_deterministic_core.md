@@ -61,10 +61,13 @@ string pairs only; there is no audio yet and no speech number is claimed.
 
 ## 2. Tests
 
-`python -m pytest tests` — **81 passed** (Python 3.11.15, Linux; the MacBook
-run on 3.14 is still to be repeated by the student). `python
-tests/test_kb_consistency.py` PASS; `python scripts/audit_foundation.py` ALL
-11 CHECKS PASS. Test files: `test_normalizer.py` (40 cases incl. must-not-fire
+`python -m pytest tests` — **81 passed** on the student's MacBook
+(Python 3.14.3, macOS arm64, project venv with the pinned requirements;
+12 Sep 2026) — the environment of record. The same suite also passed in the
+Linux/Python 3.11 workspace where the code was written. `python
+scripts/audit_foundation.py` ALL 11 CHECKS PASS on both; `python
+scripts/run_deterministic_seed.py` on the MacBook reproduced the counts in
+§3 exactly (22 decided, 21 unresolved, 0 false resolutions). Test files: `test_normalizer.py` (40 cases incl. must-not-fire
 cases and rule-example self-checks), `test_entities.py` (22), `test_retrieval_deterministic.py`
 (13, including a seed-set-wide "no false resolution" assertion), `test_speech_metrics.py` (4).
 
