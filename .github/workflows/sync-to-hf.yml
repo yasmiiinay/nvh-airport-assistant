@@ -1,0 +1,24 @@
+# Mirror main to the Hugging Face Space so the deployed demo is always the
+# committed code. Requires a repository secret HF_TOKEN (a Hugging Face
+# access token with write permission on the Space). Without the secret the
+# job fails at the push step and the Space is left untouched.
+name: Sync to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push main to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN" || { echo "HF_TOKEN secret is not set"; exit 1; }
+          git push --force "https://yasmincinar:${HF_TOKEN}@huggingface.co/spaces/yasmincinar/nvh-assistant" HEAD:main

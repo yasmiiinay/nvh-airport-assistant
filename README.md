@@ -1,3 +1,17 @@
+---
+title: NVH Assistant
+emoji: ✈️
+colorFrom: blue
+colorTo: gray
+sdk: gradio
+sdk_version: 5.50.0
+python_version: '3.12'
+app_file: app/app.py
+pinned: false
+license: mit
+short_description: Multimodal airport passenger assistant (AI7016, fictional NVH airport)
+---
+
 # Smart Airport Passenger Assistance Multimodal Chatbot (AI7016)
 
 A multimodal (image / voice / text) assistant for a **fictional** airport,
@@ -26,9 +40,10 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 | `docs/` | Airport specification, dataset schemas, and project documents. |
 | `evaluation/` | Metric modules (pure functions now; model outputs plug in from Chat 03). |
 | `outputs/` | Everything generated (benchmarks, evaluation artefacts); git-ignored except `.gitkeep`. |
-| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`. |
-| `src/` | Pipeline code (Chat 03+); today only `kb.py` and `foundation_audit.py`. |
-| `tests/` | Consistency gate (`python tests/test_kb_consistency.py` or pytest). |
+| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1 evidence). |
+| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `retrieval.py` (deterministic cascade stages; semantic stages follow in checkpoint 03.2). |
+| `tests/` | Consistency gate plus unit tests per module (`python -m pytest tests`). |
+| `.github/workflows/` | `sync-to-hf.yml`: every push to `main` is mirrored to the Hugging Face Space (needs the `HF_TOKEN` repository secret). |
 
 ## Setup
 
@@ -66,12 +81,28 @@ python scripts/audit_foundation.py       # must print ALL CHECKS PASS
 
 ## Hugging Face Space status
 
-Account checked 11 Sep 2026: Gradio Spaces are creatable on the project
-account (Docker is Paid — consistent with the no-Docker decision). The Space
-itself is **not created yet**; the first deployment will push `app/app.py`
-(hello-world) to verify the build path and record cold-start behaviour before
-any model code exists. Open sub-check: free hardware option CPU Basic vs
-ZeroGPU-only.
+Space `yasmincinar/nvh-assistant` (Gradio SDK, MIT) was created on 12 Sep 2026
+and the hello-world in `app/app.py` passed the deployment smoke test there.
+Observed facts: the free plan offers **ZeroGPU only** (CPU Basic is not
+selectable), and ZeroGPU's startup check requires at least one
+`@spaces.GPU`-decorated function — hence the inert `zerogpu_probe()` in
+`app/app.py`. The YAML block at the top of this README is the Space
+configuration (`app_file`, pinned `sdk_version`, `python_version: 3.12` so
+numpy installs from a wheel).
+
+**Source of truth is this GitHub repository.** The workflow in
+`.github/workflows/sync-to-hf.yml` force-pushes `main` to the Space on every
+push, so the Space always runs the committed code. Open question carried to
+Chat 05: whether the pinned `torch==2.9.1` installs cleanly over the ZeroGPU
+image's preinstalled torch — the first synced build answers it.
+
+## Running the deterministic core (checkpoint 03.1)
+
+```bash
+python -m pytest tests                       # 81 tests, no model weights needed
+python scripts/run_deterministic_seed.py     # 43 seed queries -> outputs/checkpoint_03_1/
+python -m src.normalizer                     # prints the normaliser rule table (report appendix)
+```
 
 ## Provenance and privacy
 
