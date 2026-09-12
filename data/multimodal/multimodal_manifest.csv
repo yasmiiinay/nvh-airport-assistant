@@ -1,0 +1,1 @@
+sample_id,image_id,query_id,audio_id,modality_condition,intended_intent,intended_entities,target_kb_id,consistency_label,conflict_type,query_type,split

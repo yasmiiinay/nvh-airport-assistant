@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+outputs/*
+!outputs/.gitkeep
+.cache/
+*.egg-info/
+.pytest_cache/
+# model weights are downloaded at runtime, never committed
+models/
+.EasyOCR/
