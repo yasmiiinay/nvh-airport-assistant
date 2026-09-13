@@ -22,6 +22,11 @@ from `data/vocabulary.json` and are validated by `scripts/audit_foundation.py`.
 | expected_label | equals `category`; kept explicit so mislabels are auditable |
 | optional_identifier | identifier visible in the image (e.g. `B12`) or blank — feeds the OCR enhancement and conflict scenarios |
 | notes | anything a reviewer needs |
+| file | path relative to `data/images/`, e.g. `files/img_001.gif`; added at the vision checkpoint so the manifest is runnable |
+
+Images with no airport meaning (used to test out-of-scope detection) carry
+`category` and `expected_label` = `out_of_scope`, which is not a vocabulary
+category and is never a retrieval target.
 
 Collection rules (from Evidence Pack A1): no identifiable people, no third-party
 logos, no boarding passes/documents; per-file licence check for Commons items.
@@ -45,6 +50,11 @@ query_id, query, intent, entities_json (JSON object as string), target_kb_id
 | expected_identifiers | canonical identifiers the transcript contains, `;`-separated, or blank |
 | target_kb_id | copied from the query row for propagation-gap runs |
 | split | `dev` \| `heldout` |
+| file | path relative to `data/audio/`, e.g. `files/aud_001.wav` (16 kHz mono WAV); added at the speech checkpoint |
+
+Speaker codes `tts_<voice>` mark synthetic speech produced with the
+operating system's built-in voices; those clips are a separate stratum from
+human recordings and are reported as such, never mixed into a single WER.
 
 Audio files themselves are consented recordings; raw audio is never logged by
 the running system (v1.1 privacy posture) — the dataset copies live only in the
