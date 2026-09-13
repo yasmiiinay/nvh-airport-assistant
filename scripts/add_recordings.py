@@ -1,7 +1,8 @@
 """Append human recordings to data/audio/audio_manifest.csv.
 
 Put the recordings in a folder named `<query_id>__<speaker>.<ext>`, for
-example `q001__spk_01.m4a` or `h004__spk_02.wav`. The reference transcript
+example `q001__spk_01.m4a` or `h004__spk_02.wav` (the query id is matched
+case-insensitively). The reference transcript
 is the query text from the seed or held-out file, so speak it as written.
 Non-WAV files are converted with afconvert (macOS) to 16 kHz mono WAV;
 on other systems provide WAV files directly.
@@ -57,6 +58,7 @@ def main() -> int:
         if src.suffix.lower() not in (".wav", ".m4a", ".aiff", ".aif", ".mp3", ".caf") or "__" not in src.stem:
             continue
         query_id, speaker = src.stem.split("__", 1)
+        query_id = query_id.lower()          # recorder apps tend to capitalise the first letter
         if query_id not in queries:
             raise SystemExit(f"{src.name}: unknown query id {query_id}")
         if (query_id, speaker, args.environment) in known:
