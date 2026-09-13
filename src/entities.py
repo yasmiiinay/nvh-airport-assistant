@@ -184,9 +184,9 @@ def extract(text: str, gaz: Gazetteers, domain_rules: bool = True) -> Extraction
             ents.append(_identifier_entity(gaz, "gate_id", f"{m.group(1).upper()}{m.group(2)}", m.group(0)))
             consumed.append(m.span())
 
-    # --- terminal (closed set; a well-formed but unknown terminal is kept, exists=False).
+    # --- terminal (closed set; an unknown terminal is kept with exists=False) ---
     # Not added to `consumed`: aliases such as "accessible toilet terminal 2"
-    # legitimately contain the terminal words and must still match. ---
+    # contain the terminal words and must still match.
     for m in TERMINAL_PATTERN.finditer(norm):
         value = f"Terminal {m.group(1)}"
         ents.append(Entity("terminal", value, m.group(0), exists=value in gaz.terminals))

@@ -2,7 +2,7 @@
 
 Foundation stage: the harness and its measurement discipline exist and are
 verified with the built-in 'noop' loader. Real model loaders are added in
-Chat 03 -- the registry entries below raise NotImplementedError until then.
+the pipeline phase; the registry entries below raise NotImplementedError until then.
 NEVER report a timing that was not produced by running this script.
 
 Usage:
@@ -42,7 +42,7 @@ def _load_noop():
     return sum(i * i for i in range(200_000))
 
 
-# TODO(Chat 03): implement these loaders. Each returns the loaded object.
+# TODO(pipeline phase): implement these loaders. Each returns the loaded object.
 #   clip      -> transformers CLIPModel + processor (SETTINGS.clip_model_id)
 #   whisper   -> transformers ASR pipeline (SETTINGS.whisper_model_id)
 #   minilm    -> sentence_transformers SentenceTransformer (SETTINGS.sentence_model_id)
@@ -69,7 +69,7 @@ def benchmark(name: str, warmup: int, runs: int) -> dict:
     loader = LOADERS.get(name)
     if loader is None:
         raise NotImplementedError(
-            f"Loader '{name}' is a Chat 03 task; only 'noop' runs at foundation stage.")
+            f"Loader '{name}' is a pipeline-phase task; only 'noop' runs at foundation stage.")
     rss_before = peak_rss_mb()
     for _ in range(max(0, warmup)):
         loader()

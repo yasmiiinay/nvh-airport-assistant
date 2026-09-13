@@ -20,7 +20,7 @@ def intent_confusion(gold: list[str], predicted: list[str]) -> dict:
 
 def entity_extraction_accuracy(gold_entities: list[dict], predicted_entities: list[dict]) -> dict:
     """Exact-match per entity field, micro-averaged. Pure comparison; runnable
-    as soon as the extractor exists (Chat 03)."""
+    as soon as the extractor exists (pipeline phase)."""
     total = correct = 0
     for g, p in zip(gold_entities, predicted_entities):
         for key, value in g.items():
@@ -30,4 +30,4 @@ def entity_extraction_accuracy(gold_entities: list[dict], predicted_entities: li
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 03+): persist to outputs/evaluation/text/")
+    raise NotImplementedError("TODO(evaluation phase): persist to outputs/evaluation/text/")

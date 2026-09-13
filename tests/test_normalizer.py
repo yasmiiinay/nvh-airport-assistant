@@ -87,11 +87,8 @@ def test_rule_table_lists_every_rule():
 
 def test_rule_examples_hold():
     """Each rule's documented example must actually be produced by that rule."""
-    import re
     for rule in RULES:
-        if rule.replacement.startswith("<map:"):
-            continue  # callable rules are covered by L2_CASES
-        assert re.sub(rule.pattern, rule.replacement, rule.example_in) == rule.example_out, rule.name
+        assert rule.apply(rule.example_in) == rule.example_out, rule.name
 
 
 if __name__ == "__main__":

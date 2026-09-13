@@ -1,8 +1,8 @@
 """Speech metrics (RQ2). Definitions per Evidence Pack section A4.
 
 WER is computed at two normalisation levels and BOTH are always reported:
-  L1 -- generic normalisation only (raw ASR quality; the headline number)
-  L2 -- L1 plus the airport-specific normaliser
+  L1: generic normalisation only (raw ASR quality; the headline number)
+  L2: L1 plus the airport-specific normaliser
 L1 - L2 is the measured benefit of the domain normaliser. Number words are
 normalised at BOTH levels (following the Whisper paper's own normaliser);
 only airport-specific repairs (letter words, spacing, terminal forms) are L2.
@@ -87,4 +87,4 @@ def propagation_gap(retrieval_acc_from_reference: float,
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 04): persist to outputs/evaluation/speech/")
+    raise NotImplementedError("TODO(speech evaluation phase): persist to outputs/evaluation/speech/")

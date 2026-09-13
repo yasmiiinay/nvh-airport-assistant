@@ -1,6 +1,6 @@
 """Multimodal fusion metrics (RQ3): condition x query-type grid, conflicts,
 cascade vs weighted-fusion comparison. Aggregation only; conditions come from
-the multimodal manifest, outcomes from the Chat 03 pipeline."""
+the multimodal manifest, outcomes from the pipeline."""
 from __future__ import annotations
 from collections import defaultdict
 
@@ -39,4 +39,4 @@ def cascade_vs_fusion(*args, **kwargs):
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 03+): persist to outputs/evaluation/multimodal/")
+    raise NotImplementedError("TODO(evaluation phase): persist to outputs/evaluation/multimodal/")

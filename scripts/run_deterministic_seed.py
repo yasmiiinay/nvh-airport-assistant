@@ -12,7 +12,7 @@ Verdicts:
   correct              deterministic decision matches the seed expectation
   wrong                deterministic stage decided, and the decision or the
                        record differs from the seed expectation (a false
-                       resolution -- the failure class this stage must avoid)
+                       resolution, the failure class this stage must avoid)
   handed_to_semantic   not decided here; by design for paraphrase/vague/
                        out-of-scope queries, not counted as a failure
 """
@@ -35,7 +35,7 @@ from src.retrieval import resolve_deterministic
 DIFFICULT = ["q009", "q013", "q015", "q019", "q023", "q036", "q041", "q042", "q043"]
 
 
-def verdict(row: dict, result) -> tuple[str, str]:
+def verdict(row: dict, result, gaz) -> tuple[str, str]:
     target = row["target_kb_id"] or None
     expected = row["expected_behaviour"]
     if not result.resolved:
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     rows, results = [], []
     for q in queries:
         r = resolve_deterministic(q["query"], gaz)
-        v, detail = verdict(q, r)
+        v, detail = verdict(q, r, gaz)
         results.append(r)
         rows.append({
             "query_id": q["query_id"], "query": q["query"], "normalized": r.normalized,

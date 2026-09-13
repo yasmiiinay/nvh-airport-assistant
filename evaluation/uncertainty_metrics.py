@@ -32,7 +32,7 @@ def risk_coverage_curve(scores: list[float], correct: list[bool],
 
 def band_table(scores: list[float], correct: list[bool],
                tau_low: float, tau_high: float) -> dict:
-    """Accuracy/error per match-score band -- the table that replaced the
+    """Accuracy/error per match-score band, the table that replaced the
     reliability diagram (Evidence Pack A7). Band edges are the operational
     thresholds, so the label and the behaviour cannot drift apart."""
     bands = {"strong": [], "uncertain": [], "abstain": []}
@@ -57,4 +57,4 @@ def threshold_sensitivity(scores: list[float], correct: list[bool],
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 03+): persist to outputs/evaluation/uncertainty/")
+    raise NotImplementedError("TODO(evaluation phase): persist to outputs/evaluation/uncertainty/")

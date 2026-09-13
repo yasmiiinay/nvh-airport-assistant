@@ -2,7 +2,7 @@
 
 Purpose: prove the build path (requirements install, app boot, cold start)
 before any model code exists. This file is replaced by the real interface in
-Chat 05. It deliberately imports nothing heavy.
+final deployment. It deliberately imports nothing heavy.
 
 ZeroGPU constraint (observed 12 Sep 2026): free Gradio Spaces run on ZeroGPU,
 whose startup check refuses apps with no @spaces.GPU-decorated function

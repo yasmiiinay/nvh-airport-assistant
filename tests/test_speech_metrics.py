@@ -2,7 +2,7 @@
 
 These are NOT speech results: no audio exists yet. They prove that the two
 WER levels and identifier-token accuracy compute what Evidence Pack A4
-defines, so that Chat 04 can drop real transcripts in without touching the
+defines, so that the speech evaluation can drop real transcripts in without touching the
 metric code."""
 import sys
 from pathlib import Path

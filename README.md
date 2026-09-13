@@ -38,7 +38,7 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 | `data/text/` | Seed query set (`queries_seed.csv`, 43 rows) — the text half of every later evaluation. |
 | `data/vocabulary.json` | Frozen controlled vocabulary shared by image labels, intents, entities, KB categories and routing. |
 | `docs/` | Airport specification, dataset schemas, and project documents. |
-| `evaluation/` | Metric modules (pure functions now; model outputs plug in from Chat 03). |
+| `evaluation/` | Metric modules (pure functions now; model outputs plug in from the pipeline phase). |
 | `outputs/` | Everything generated (benchmarks, evaluation artefacts); git-ignored except `.gitkeep`. |
 | `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1 evidence). |
 | `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `retrieval.py` (deterministic cascade stages; semantic stages follow in checkpoint 03.2). |
@@ -65,7 +65,7 @@ python scripts/audit_foundation.py       # must print ALL CHECKS PASS
 - **Not yet verified (label kept until measured):** installation and imports on
   **macOS arm64** (run `scripts/smoke_test.py` locally); actual CPU latency and
   memory for any model (run `scripts/benchmark_env.py` — loaders land in
-  Chat 03); behaviour on the Hugging Face Space.
+  pipeline phase); behaviour on the Hugging Face Space.
 - Pin policy: latest **mature** lines, not latest majors (e.g. `transformers`
   4.57.x and `gradio` 5.50.0 rather than the 5.x/6.x majors released later),
   because the course reference notebooks and the model cards used here are
@@ -90,7 +90,7 @@ configuration (`app_file`, pinned `sdk_version`, `python_version: 3.12` so
 numpy installs from a wheel).
 
 **Source of truth is this GitHub repository.** The Space is updated by
-pushing `main` to it at deployment checkpoints (Chat 05), not automatically;
+pushing `main` to it at deployment checkpoints (final deployment), not automatically;
 the pinned `requirements.txt` has not yet been built on the ZeroGPU image,
 and that build is the first step of the final deployment, not a side effect
 of every commit. The YAML block above is what makes a plain `git push` to the

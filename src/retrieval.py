@@ -5,11 +5,11 @@ category filter -> semantic similarity -> decision].  This module implements
 everything before the first bracket, plus two scripted branches that must run
 before any retrieval at all:
 
-  * volatile redirect -- a flight reference or a volatile phrase means any
+  * volatile redirect: a flight reference or a volatile phrase means any
     KB answer could be stale, so the query is redirected to the official
     source *before* an identifier is looked up ("what gate is flight XY456
     leaving from" must not become a gate answer).
-  * grounded negatives -- a well-formed identifier outside every KB range, a
+  * grounded negatives: a well-formed identifier outside every KB range, a
     terminal outside the closed set, or a service category the KB holds only
     in another terminal. These are answered from KB structure, not from
     similarity, and are the cases a semantic stage would get wrong by

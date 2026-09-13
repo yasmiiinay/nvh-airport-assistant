@@ -32,4 +32,4 @@ def decision_rates(decisions: list[str]) -> dict:
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 03+): persist to outputs/evaluation/retrieval/")
+    raise NotImplementedError("TODO(evaluation phase): persist to outputs/evaluation/retrieval/")

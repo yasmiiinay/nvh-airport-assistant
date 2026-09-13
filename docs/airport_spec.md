@@ -1,6 +1,6 @@
 # Nordhaven International Airport (NVH) — Fictional Airport Specification v1
 
-Status: **frozen** after Chat 02C. Change only on a structural error, never for convenience.
+Status: **frozen** after the foundation stage. Change only on a structural error, never for convenience.
 Everything in this document is **synthetic**. The airport, its code, all names, hours and
 layout are invented for AI7016. No real airport's data was copied. The IATA-style code
 "NVH" is a fiction and has **not** been checked against the IATA registry

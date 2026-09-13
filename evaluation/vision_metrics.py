@@ -1,4 +1,4 @@
-"""Vision pipeline metrics (RQ1). Pure aggregation; predictions arrive in Chat 03."""
+"""Vision pipeline metrics (RQ1). Pure aggregation; predictions arrive in the pipeline phase."""
 from __future__ import annotations
 from collections import Counter
 
@@ -37,4 +37,4 @@ def oos_anchor_abstention(in_scope_abstained: list[bool], oos_abstained: list[bo
 
 
 def write_artifacts(*args, **kwargs):
-    raise NotImplementedError("TODO(Chat 03+): persist tables to outputs/evaluation/vision/")
+    raise NotImplementedError("TODO(evaluation phase): persist tables to outputs/evaluation/vision/")

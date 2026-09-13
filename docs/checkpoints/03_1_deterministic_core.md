@@ -205,9 +205,9 @@ None structural. Three housekeeping items fixed in this checkpoint:
 `importlib.metadata`; the README's Space status was stale relative to the
 Foundation Report and now describes the live Space; the README carries the
 Space's YAML configuration so a plain `git push` to the Space deploys the
-committed code at Chat 05. A GitHub→Space auto-sync workflow was added and
+committed code at final deployment. A GitHub→Space auto-sync workflow was added and
 then removed on review: it would have forced the pinned-requirements build on
-ZeroGPU as a side effect of the first push, which is a Chat 05 question, not a
+ZeroGPU as a side effect of the first push, which is a final-deployment question, not a
 03.1 one.
 
 Dev-set annotation correction (not an architecture change): the seed row

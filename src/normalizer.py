@@ -2,10 +2,10 @@
 
 Two levels, applied in order (Evidence Pack A4; Architecture Freeze v1.1 4.2):
 
-  L1  generic  -- lowercase, contraction expansion, punctuation, whitespace,
+  L1  generic:  lowercase, contraction expansion, punctuation, whitespace,
                   cardinal number words -> digits. Applied identically to WER
                   references and hypotheses, so it never flatters the ASR.
-  L2  airport  -- letter words / NATO words -> pier letters, identifier spacing
+  L2  airport:  letter words / NATO words -> pier letters, identifier spacing
                   collapse ("b 12" -> "b12"), terminal short forms ("t2" ->
                   "terminal 2"), a small service-name homophone map.
 
@@ -16,7 +16,7 @@ disambiguate "a").
 Every rule is a row in RULES so the report appendix can print the table with
 each rule's level, provenance ("design" = derived from the identifier grammar,
 "anticipated" = a plausible ASR confusion not yet observed, "observed" = taken
-from the Chat 04 error catalogue) and a worked example. A rule with provenance
+from the speech-evaluation error catalogue) and a worked example. A rule with provenance
 "anticipated" must be re-labelled or removed once real transcripts exist.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ class Rule:
     name: str
     level: str          # "L1" or "L2"
     pattern: str        # regex applied to the running lowercase string
-    replacement: str    # re.sub replacement (may reference groups)
+    replacement: object # re.sub replacement: a string with groups, or a function of the match
     example_in: str
     example_out: str
     provenance: str     # "design" | "anticipated" | "observed"
@@ -165,39 +165,29 @@ _CONTEXT_LETTER_WORDS = {"a": "a", "be": "b", "bee": "b", "see": "c", "sea": "c"
 _GATE_CONTEXT = r"(?:gate|gates|pier)"
 
 
-def _letter_word_rule(name: str, words: dict[str, str], context: str | None,
-                      example_in: str, example_out: str) -> Rule:
-    alternatives = "|".join(sorted(words, key=len, reverse=True))
-    prefix = rf"\b({context})\s+" if context else r"\b()"
-    pattern = rf"{prefix}({alternatives})\s+(\d{{1,2}})\b"
-
-    def repl(m: re.Match) -> str:
-        ctx = (m.group(1) + " ") if m.group(1) else ""
-        return f"{ctx}{words[m.group(2)]}{m.group(3)}"
-
-    # Rule.apply uses re.sub with a string replacement; letter mapping needs a
-    # callable, so the rule stores a sentinel and apply_l2 dispatches on it.
-    return Rule(name, "L2", pattern, f"<map:{name}>", example_in, example_out, "design"), repl
+def _map_letter_after_gate_keyword(m: re.Match) -> str:
+    return f"{m.group(1)} {_CONTEXT_LETTER_WORDS[m.group(2)]}{m.group(3)}"
 
 
-_LETTER_CONTEXT_RULE, _letter_context_repl = _letter_word_rule(
-    "letter_word_after_gate_keyword", _CONTEXT_LETTER_WORDS, _GATE_CONTEXT,
-    "gate be twelve", "gate b12")
-_LETTER_SAFE_RULE, _letter_safe_repl = _letter_word_rule(
-    "letter_word_before_number", _SAFE_LETTER_WORDS, None,
-    "bravo 7", "b7")
-_CALLABLE_REPLACEMENTS = {
-    _LETTER_CONTEXT_RULE.name: _letter_context_repl,
-    _LETTER_SAFE_RULE.name: _letter_safe_repl,
-}
+def _map_safe_letter(m: re.Match) -> str:
+    return f"{_SAFE_LETTER_WORDS[m.group(1)]}{m.group(2)}"
+
+
+def _alternatives(words: dict[str, str]) -> str:
+    return "|".join(sorted(words, key=len, reverse=True))
+
 
 L2_RULES: list[Rule] = [
     Rule("terminal_short_form", "L2", r"\bt\s?([12])\b", r"terminal \1",
          "t2 check in", "terminal 2 check in", "design"),
     Rule("terminal_glued", "L2", r"\bterminal(\d)\b", r"terminal \1",
          "terminal1", "terminal 1", "anticipated"),
-    _LETTER_CONTEXT_RULE,
-    _LETTER_SAFE_RULE,
+    Rule("letter_word_after_gate_keyword", "L2",
+         rf"\b({_GATE_CONTEXT})\s+({_alternatives(_CONTEXT_LETTER_WORDS)})\s+(\d{{1,2}})\b",
+         _map_letter_after_gate_keyword, "gate be 12", "gate b12", "design"),
+    Rule("letter_word_before_number", "L2",
+         rf"\b({_alternatives(_SAFE_LETTER_WORDS)})\s+(\d{{1,2}})\b",
+         _map_safe_letter, "bravo 7", "b7", "design"),
     Rule("desk_glued", "L2", r"\bdesk(\d{3})\b", r"desk \1",
          "desk145", "desk 145", "anticipated"),
     Rule("belt_glued", "L2", r"\bbelt(\d{1,2})\b", r"belt \1",
@@ -224,8 +214,7 @@ def normalize_l2(text: str) -> str:
     safe on raw text because it lowercases through normalize_l1 first."""
     t = normalize_l1(text)
     for rule in L2_RULES:
-        repl = _CALLABLE_REPLACEMENTS.get(rule.name)
-        t = re.sub(rule.pattern, repl, t) if repl else rule.apply(t)
+        t = rule.apply(t)
     return re.sub(r"\s+", " ", t).strip()
 
 
