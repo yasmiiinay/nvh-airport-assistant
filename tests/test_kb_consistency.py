@@ -16,6 +16,26 @@ def test_foundation_consistency():
     assert not problems, "\n".join(problems)
 
 
+def test_heldout_queries_are_valid_and_not_seed_paraphrases():
+    """The held-out file passes the same checks as the seed file and shares
+    no query with it. Lexical overlap with any seed query stays below 0.6
+    (token Jaccard), a coarse guard against near-copies."""
+    from src.foundation_audit import check_queries, load_kb, load_queries, load_vocabulary
+    from src.normalizer import normalize
+    kb, vocab = load_kb(SETTINGS.kb_path), load_vocabulary(SETTINGS.vocabulary_path)
+    heldout = load_queries(SETTINGS.queries_heldout_path)
+    seed = load_queries(SETTINGS.queries_seed_path)
+    assert check_queries(heldout, kb, vocab) == []
+    assert all(q["split"] == "heldout" for q in heldout)
+    seed_norm = {normalize(q["query"]) for q in seed}
+    for q in heldout:
+        assert normalize(q["query"]) not in seed_norm, q["query_id"]
+        tokens = set(normalize(q["query"]).split())
+        for s in seed:
+            other = set(normalize(s["query"]).split())
+            assert len(tokens & other) / len(tokens | other) < 0.6, (q["query_id"], s["query_id"])
+
+
 def test_pure_metrics_run_without_models():
     """The metric functions that need no model must work today."""
     from evaluation.vision_metrics import top_k_accuracy
@@ -32,5 +52,6 @@ def test_pure_metrics_run_without_models():
 
 if __name__ == "__main__":
     test_foundation_consistency()
+    test_heldout_queries_are_valid_and_not_seed_paraphrases()
     test_pure_metrics_run_without_models()
     print("tests: PASS")
