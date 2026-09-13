@@ -1,8 +1,11 @@
-"""Evaluate the full text cascade (deterministic + semantic) on the seed set.
+"""Evaluate the full text cascade (deterministic + semantic) on a query set.
 
-Checkpoint 03.2 evidence. Loads MiniLM once, encodes every seed query once,
-then reuses the vectors for every experiment below. Writes to
-outputs/checkpoint_03_2/:
+Checkpoint 03.2 evidence. Loads MiniLM once, encodes every query once, then
+reuses the vectors for every experiment below. `--set dev` (default) runs
+the 43 seed queries and also the threshold grid and the category-cue
+experiment; `--set heldout` runs the frozen held-out file with the same
+thresholds and no tuning of any kind. Writes to outputs/checkpoint_03_2/
+(dev) or outputs/checkpoint_03_2/heldout/:
 
   intent_results.csv      predicted vs gold intent per query, with the matched exemplar
   intent_report.json      precision / recall / F1 per intent, macro F1, confusion pairs
@@ -13,10 +16,11 @@ outputs/checkpoint_03_2/:
   threshold_grid.csv      correct decisions on the 21 unresolved queries per setting
   cue_experiment.csv      intent filter vs lexical cue filter vs whole KB
 
-The 43 seed queries are all dev split; nothing here touches held-out data.
+Thresholds come from configs/settings.py in both modes.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import sys
@@ -37,7 +41,6 @@ from src.intent import NO_INTENT, predict_intent
 from src.retrieval import build_text_index, resolve_deterministic, resolve_semantic
 from src.text_encoder import encode
 
-OUT_DIR = SETTINGS.outputs_dir / "checkpoint_03_2"
 DIFFICULT = ["q009", "q013", "q015", "q017", "q026", "q027", "q031", "q034",
              "q037", "q038", "q039", "q040", "q043"]
 
@@ -129,10 +132,15 @@ def minilm_on_same_split(queries, vectors, index):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--set", choices=["dev", "heldout"], default="dev")
+    args = parser.parse_args()
+    tuning = args.set == "dev"
+    OUT_DIR = SETTINGS.outputs_dir / "checkpoint_03_2" / ("" if tuning else "heldout")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     gaz = load_gazetteers(SETTINGS.kb_path, SETTINGS.vocabulary_path)
     index = build_text_index(gaz, SETTINGS.intent_exemplars_path)
-    queries = load_queries(SETTINGS.queries_seed_path)
+    queries = load_queries(SETTINGS.queries_seed_path if tuning else SETTINGS.queries_heldout_path)
     vectors = encode([resolve_deterministic(q["query"], gaz).normalized for q in queries])
     thresholds = SETTINGS.thresholds()
 
@@ -183,7 +191,13 @@ if __name__ == "__main__":
             [q["query_type"] for q in queries], [row["verdict"] for row in rows]),
         "deterministic_only_correct": count_correct(queries, deterministic_only),
         "full_pipeline_correct": count_correct(queries, results),
-        "n_queries": len(queries),
+        "n_queries": len(queries), "query_set": args.set,
+        "n_semantic_workload": len(unresolved_ids),
+        "wrong_record_answers": sum(1 for row in rows if row["decision"] == "answer"
+                                    and row["matched_record_id"]
+                                    and row["matched_record_id"] != row["target_kb_id"]),
+        "grounded_negative_answers": [row["query_id"] for row in rows
+                                      if row["decision"] == "answer" and "grounded_negative" in row["flags"]],
         "semantic_failures": [{"query_id": row["query_id"], "decision": row["decision"],
                                "matched": row["matched_record_id"], "detail": row["verdict_detail"]}
                               for row in semantic_rows if row["verdict"] != "correct"],
@@ -192,35 +206,37 @@ if __name__ == "__main__":
 
     # ---- threshold sensitivity (dev split only) ----
     grid_rows = []
-    for tau_high, tau_low, margin_delta in product(*GRID.values()):
+    for tau_high, tau_low, margin_delta in (product(*GRID.values()) if tuning else []):
         if tau_low >= tau_high:
             continue
         trial = dict(thresholds, tau_high=tau_high, tau_low=tau_low, margin_delta=margin_delta)
         trial_results = run_cascade(queries, vectors, gaz, index, trial)
         decisions = Counter(r.decision for q, r in zip(queries, trial_results) if q["query_id"] in unresolved_ids)
         grid_rows.append({"tau_high": tau_high, "tau_low": tau_low, "margin_delta": margin_delta,
-                          "correct_of_21": count_correct(queries, trial_results, unresolved_ids),
+                          "correct_of_unresolved": count_correct(queries, trial_results, unresolved_ids),
                           "answer": decisions["answer"], "clarify": decisions["clarify"],
                           "abstain": decisions["abstain"], "redirect": decisions["redirect"],
                           "wrong_record_answers": sum(
                               1 for q, r in zip(queries, trial_results)
                               if q["query_id"] in unresolved_ids and r.decision == "answer"
                               and r.matched_record_id != (q["target_kb_id"] or None))})
-    write_csv(OUT_DIR / "threshold_grid.csv", grid_rows)
+    if grid_rows:
+        write_csv(OUT_DIR / "threshold_grid.csv", grid_rows)
 
     # ---- category cues: intent filter (frozen) vs cue filter vs no filter ----
     cue_rows = []
-    for mode in ("intent", "cues", "none"):
+    for mode in (("intent", "cues", "none") if tuning else ()):
         mode_results = run_cascade(queries, vectors, gaz, index, thresholds, filter_mode=mode)
         top1_hits = sum(1 for q, r in zip(queries, mode_results)
                         if q["query_id"] in unresolved_ids and q["target_kb_id"]
                         and r.ranked and r.ranked[0][0] == q["target_kb_id"])
         cue_rows.append({"filter_mode": mode,
-                         "correct_of_21": count_correct(queries, mode_results, unresolved_ids),
-                         "top1_is_target_of_8": top1_hits,
+                         "correct_of_unresolved": count_correct(queries, mode_results, unresolved_ids),
+                         "top1_is_target": top1_hits,
                          "q015_top1": next(r.ranked[0][0] if r.ranked else "" for q, r in zip(queries, mode_results)
                                            if q["query_id"] == "q015")})
-    write_csv(OUT_DIR / "cue_experiment.csv", cue_rows)
+    if cue_rows:
+        write_csv(OUT_DIR / "cue_experiment.csv", cue_rows)
 
     # ---- console ----
     print(f"intent: accuracy {intent_report['accuracy']:.3f}  macro F1 {intent_report['macro_f1']:.3f}  "
@@ -231,8 +247,8 @@ if __name__ == "__main__":
     print("\nstage counts:", summary["stage_counts"])
     print("decisions:", summary["decision_counts"])
     print("verdicts all:", summary["verdicts_all"], " semantic workload:", summary["verdicts_semantic_workload"])
-    print(f"deterministic-only correct {summary['deterministic_only_correct']}/43, "
-          f"full pipeline correct {summary['full_pipeline_correct']}/43")
+    print(f"deterministic-only correct {summary['deterministic_only_correct']}/{len(queries)}, "
+          f"full pipeline correct {summary['full_pipeline_correct']}/{len(queries)}")
     print("\nsemantic workload:")
     for row in semantic_rows:
         print(f"  {row['query_id']} {row['stage']:25} {row['decision']:8} {row['matched_record_id'] or '-':24} "
@@ -241,7 +257,7 @@ if __name__ == "__main__":
     print("\ncue experiment:")
     for row in cue_rows:
         print(" ", row)
-    print("\nthreshold grid (top 6 by correct_of_21):")
-    for row in sorted(grid_rows, key=lambda r: (-r["correct_of_21"], r["wrong_record_answers"]))[:6]:
+    print("\nthreshold grid (top 6):")
+    for row in sorted(grid_rows, key=lambda r: (-r["correct_of_unresolved"], r["wrong_record_answers"]))[:6]:
         print(" ", row)
     print(f"\nwritten to {OUT_DIR}")
