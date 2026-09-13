@@ -11,3 +11,5 @@ outputs/*
 # model weights are downloaded at runtime, never committed
 models/
 .EasyOCR/
+data/images/raw/
+data/audio_own/
