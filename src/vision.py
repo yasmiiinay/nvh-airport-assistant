@@ -20,11 +20,21 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+try:
+    # iPhone photos arrive as HEIC, which Pillow cannot open on its own; the
+    # first browser test on a MacBook failed on exactly that. Registering the
+    # opener here covers both the loader below and the interface's upload.
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
+
 from configs.settings import SETTINGS
 from src.retrieval import decide
 
 MIN_SIDE = 64            # pixels; anything smaller cannot carry a sign
-MAX_PIXELS = 25_000_000  # refuse absurd uploads before decoding them fully
+MAX_PIXELS = 120_000_000 # refuse absurd uploads before decoding them fully (a 48 MP phone photo is 48e6)
+WORKING_SIDE = 2048      # larger photos are reduced to this before analysis; CLIP sees 224 px anyway
 BLUR_THRESHOLD = 60.0    # variance of the Laplacian on the grey image, below = blurry
 DARK_THRESHOLD = 40.0    # mean grey level 0..255
 BRIGHT_THRESHOLD = 225.0
@@ -61,7 +71,10 @@ def load_image(path: str | Path) -> Image.Image:
         raise ValueError(f"image too large: {image.width}x{image.height}")
     if min(image.width, image.height) < MIN_SIDE:
         raise ValueError(f"image too small: {image.width}x{image.height}")
-    return flatten_on_white(ImageOps.exif_transpose(image))
+    image = ImageOps.exif_transpose(image)
+    if max(image.width, image.height) > WORKING_SIDE:
+        image.thumbnail((WORKING_SIDE, WORKING_SIDE))
+    return flatten_on_white(image)
 
 
 def flatten_on_white(image: Image.Image) -> Image.Image:

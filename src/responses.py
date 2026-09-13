@@ -182,7 +182,9 @@ def _modality_notes(outcome, gaz) -> list[str]:
     """Sentences that say what the other modalities contributed."""
     lines = []
     if outcome.speech is not None:
-        if outcome.speech.check.ok:
+        if outcome.speech.check.ok and "text" in outcome.modalities:
+            lines.append(f'I heard: "{outcome.speech.transcript_raw}", but used your typed question.')
+        elif outcome.speech.check.ok:
             lines.append(f'I heard: "{outcome.speech.transcript_raw}".')
         else:
             lines.append(f"I could not use the voice clip ({outcome.speech.check.problem}); "

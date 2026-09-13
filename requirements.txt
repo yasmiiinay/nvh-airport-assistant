@@ -12,3 +12,4 @@ gradio==5.50.0
 jiwer==4.0.0
 psutil==7.2.2
 soundfile==0.13.1
+pillow-heif==1.7.0   # HEIC photos straight from an iPhone; registered as a Pillow opener in src/vision.py

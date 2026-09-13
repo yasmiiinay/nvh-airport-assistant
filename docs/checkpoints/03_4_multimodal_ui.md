@@ -21,6 +21,7 @@ EXECUTED (this workspace), VERIFIED (also on the MacBook), NOT YET EVALUATED.
 | `data/multimodal/multimodal_manifest.csv` | 68 authored scenarios, 35 dev and 33 held-out |
 | `data/audio/derived_manifest.csv`, `files/aud_126..129.wav` | four clips derived from existing ones (gain, noise) for the low-quality cases |
 | `app/app.py` | the interface (replaces the deployment smoke test) |
+| `src/vision.py`, `requirements.txt` | HEIC opener registered, oversized photos reduced to 2048 px (found in the MacBook browser session) |
 | `tests/test_router.py`, `test_event_log.py`, `test_app.py` | 17 + 3 + 5 tests |
 | `docs/dataset_schemas.md`, `README.md` | multimodal manifest columns, derived clips, how to run |
 
@@ -254,9 +255,23 @@ on the screenshots; the callbacks are also exercised directly in
 | narrow viewport | 400 px | one column, all controls reachable |
 
 Microphone recording could not be exercised here (no audio device in the
-workspace); the upload path uses the same component and the same
-callback. Recording in a browser on the MacBook is the remaining manual
-check.
+workspace). The project owner then ran the interface in Safari on the
+MacBook: a spoken "Where is gate B12?" was transcribed exactly and
+answered; a typed question with a recording still attached answered from
+the typed words and showed the transcript, and the note now says the
+typed question was used; a pictogram upload behaved as in the evaluation
+(the reduced bar symbol, img_011, in the uncertain band, as on dev). One
+new defect came out of that session: a photo taken with the phone was
+uploaded as HEIC, which Pillow cannot open, and the component failed
+before the callback ran, so every output showed a bare "Error". The
+opener from `pillow-heif` is now registered in `src/vision.py` (one new
+pinned dependency, justified by iPhone uploads being HEIC by default), the
+same photo routes normally, and a test writes and reads a HEIC file. The
+same photo was 24.5 megapixels, just under the 25 MP refusal limit set in
+03.3; a current phone produces 48 MP, which would have been refused. The
+limit is now 120 MP and photos are reduced to 2048 px on the long side
+before analysis (CLIP works at 224 px); the vision dev and held-out
+results are unchanged by this.
 
 ## 11. Logging and escalation
 
@@ -316,7 +331,7 @@ the smoke-test Space from 02C shows the build path works.
   run once and is no longer blind to the developer.
 - Removal of the remaining `write_artifacts` stubs in `evaluation/`.
 - MacBook re-run of `run_multimodal_eval.py` (dev, heldout,
-  `--confirm-image-only`) and a microphone check in a browser.
+  `--confirm-image-only`); the microphone check in a browser is done.
 
 # PROJECT STATE — END OF CHAT 03
 

@@ -63,6 +63,17 @@ def test_transparent_pictograms_keep_their_shape(tmp_path):
     assert not np.array_equal(square, bar)
 
 
+def test_large_and_heic_photos_are_reduced_and_readable(tmp_path):
+    big = tmp_path / "big.jpg"
+    Image.new("RGB", (6000, 4000), (200, 200, 200)).save(big)
+    loaded = load_image(big)
+    assert max(loaded.size) == vision.WORKING_SIDE and loaded.size == (2048, 1365)
+    pytest.importorskip("pillow_heif")
+    heic = tmp_path / "phone.heic"
+    Image.new("RGB", (300, 200), (10, 10, 10)).save(heic, format="HEIF")
+    assert load_image(heic).size == (300, 200)
+
+
 def test_quality_flags():
     dark_flat = Image.new("RGB", (200, 200), (10, 10, 10))
     assert set(check_image(dark_flat).flags) == {"blurry", "dark"}
