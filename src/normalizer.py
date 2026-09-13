@@ -204,6 +204,13 @@ L2_RULES: list[Rule] = [
          "is the launch open", "is the lounge open", "anticipated"),
     Rule("homophone_toilet", "L2", r"\btoilette?s?\b", "toilet",
          "nearest toilette", "nearest toilet", "anticipated"),
+    # The two rules below come from the first Whisper-base run on synthetic
+    # voices (outputs/checkpoint_03_3/speech): "P1" was emitted as "p 1"
+    # (aud_110) and "desk 145" as "disk 145" (aud_053).
+    Rule("car_park_letter_split", "L2", r"\bp (\d)\b", r"p\1",
+         "parked in p 1", "parked in p1", "observed"),
+    Rule("homophone_desk", "L2", r"\bdisk (\d{3})\b", r"desk \1",
+         "where is disk 145", "where is desk 145", "observed"),
 ]
 
 RULES: list[Rule] = L1_RULES + L2_RULES

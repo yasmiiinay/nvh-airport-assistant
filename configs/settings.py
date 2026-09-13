@@ -49,8 +49,10 @@ class Settings:
     score_label: str = "match score"
     score_bands: tuple = ("strong match", "uncertain - please confirm", "no reliable match")
 
-    # --- audio quality gate bounds (initial values; validated in the pipeline phase) ---
-    audio_min_seconds: float = 1.0
+    # --- audio quality gate bounds ---
+    # min_seconds was 1.0 until the first speech run: six synthetic clips of a
+    # three-word query ("gate c3?") lasted 0.9-1.0 s and were rejected unheard.
+    audio_min_seconds: float = 0.5
     audio_max_seconds: float = 60.0
     audio_min_rms_dbfs: float = -45.0   # quieter than this is treated as silence
     audio_sample_rate: int = 16000      # what Whisper expects

@@ -46,6 +46,10 @@ L2_CASES = [
     ("is the launch open", "is the lounge open"),
     ("nearest toilette", "nearest toilet"),
     ("where is desk145", "where is desk 145"),
+    ("i parked in p 1", "i parked in p1"),          # observed: Whisper on aud_110
+    ("where is disk 145", "where is desk 145"),      # observed: Whisper on aud_053
+    ("a disk of 145 mm", "a disk of 145 mm"),        # only the desk-number shape is touched
+    ("the p 12 bus", "the p 12 bus"),                # car parks have one digit
 ]
 
 STOP_WORDS_MUST_SURVIVE = [

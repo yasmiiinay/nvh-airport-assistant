@@ -36,6 +36,7 @@ def gaz():
 def test_duration_gate():
     assert not check_audio(tone(0.4), RATE).ok
     assert "too short" in check_audio(tone(0.4), RATE).problem
+    assert check_audio(tone(0.9), RATE).ok      # a three-word query lasts under a second
     assert check_audio(tone(3.0), RATE).ok
     assert "too long" in check_audio(tone(SETTINGS.audio_max_seconds + 5), RATE).problem
 
