@@ -31,17 +31,17 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 
 | Path | Responsibility (one sentence) |
 |---|---|
-| `app/` | Gradio entrypoint; currently a hello-world used only as the Space deployment smoke test. |
+| `app/` | The passenger assistant interface (`gr.Blocks`): text, photo and voice inputs, answer, match band, evidence panel, assistance request. |
 | `configs/` | The single `Settings` dataclass every script reads; thresholds live here and nowhere else. |
 | `data/kb/` | The synthetic knowledge base (`airport_kb.json`, 32 records). |
-| `data/images/`, `data/audio/`, `data/multimodal/` | Dataset manifests per `docs/dataset_schemas.md`. `data/audio/` holds 120 synthetic clips (five macOS voices reading 24 seed and held-out queries, `tts_utterances.csv`) plus any human recordings added with `scripts/add_recordings.py`; the image manifest is still empty. |
+| `data/images/`, `data/audio/`, `data/multimodal/` | Datasets per `docs/dataset_schemas.md`: 101 labelled images (64 AIGA/DOT pictograms from Wikimedia Commons, 30 symbols cropped from screen photographs, 7 unrelated photographs), 125 audio clips (120 synthetic from five macOS voices, 5 human) plus 4 derived low-quality clips, and 68 authored multimodal scenarios. |
 | `data/text/` | Seed query set (`queries_seed.csv`, 43 rows, dev), the held-out set (`queries_heldout.csv`, 36 rows, frozen before any run) and the dev-only intent exemplars (`intent_exemplars.csv`, 95 phrasings for the 15 intents). |
 | `data/vocabulary.json` | Frozen controlled vocabulary shared by image labels, intents, entities, KB categories and routing. |
 | `docs/` | Airport specification, dataset schemas, and project documents. |
 | `evaluation/` | Metric modules (pure functions now; model outputs plug in from the pipeline phase). |
 | `outputs/` | Everything generated (benchmarks, evaluation artefacts); git-ignored except `.gitkeep`. |
-| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1), `run_text_pipeline_seed.py` (checkpoint 03.2), `run_vision_eval.py` and `run_speech_eval.py` (checkpoint 03.3), and the dataset helpers `build_image_manifest.py`, `make_tts_audio.py`, `add_recordings.py`. |
-| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision), `responses.py` (template answers from record fields, with the caveat sentences each flag requires), `vision.py` (image checks, CLIP zero-shot ranking against category prompts, KB records and out-of-scope anchors), `speech.py` (audio gate, Whisper-base transcription, hand-off of the transcript into the same text cascade). |
+| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1), `run_text_pipeline_seed.py` (checkpoint 03.2), `run_vision_eval.py` and `run_speech_eval.py` (checkpoint 03.3), `run_multimodal_eval.py` (checkpoint 03.4), and the dataset helpers `build_image_manifest.py`, `make_tts_audio.py`, `add_recordings.py`. |
+| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision), `responses.py` (template answers from record fields, with the caveat sentences each flag requires, and the multimodal renderings), `router.py` (the deterministic multimodal routing rules and conflict surfacing), `event_log.py` (JSONL event log and the escalation record), `vision.py` (image checks, CLIP zero-shot ranking against category prompts, KB records and out-of-scope anchors), `speech.py` (audio gate, Whisper-base transcription, hand-off of the transcript into the same text cascade). |
 | `models/` | Local model copies (git-ignored): `all-MiniLM-L6-v2/`, `clip-vit-base-patch32/`, `whisper-base/`. A local copy is used when present; otherwise the hub id from `configs/settings.py` is fetched on first use. |
 | `tests/` | Consistency gate plus unit tests per module (`python -m pytest tests`). |
 
@@ -82,7 +82,8 @@ python scripts/audit_foundation.py       # must print ALL CHECKS PASS
 ## Hugging Face Space status
 
 Space `yasmincinar/nvh-assistant` (Gradio SDK, MIT) was created on 12 Sep 2026
-and the hello-world in `app/app.py` passed the deployment smoke test there.
+and a hello-world version of `app/app.py` passed the deployment smoke test
+there; the real interface has not yet been built on the Space.
 Observed facts: the free plan offers **ZeroGPU only** (CPU Basic is not
 selectable), and ZeroGPU's startup check requires at least one
 `@spaces.GPU`-decorated function — hence the inert `zerogpu_probe()` in
@@ -100,7 +101,7 @@ Space deployable when that time comes.
 ## Running the text pipeline
 
 ```bash
-python -m pytest tests                       # 138 tests; the MiniLM ones skip if the model is unavailable
+python -m pytest tests                       # 166 tests; the MiniLM ones skip if the model is unavailable
 python scripts/run_deterministic_seed.py     # checkpoint 03.1: deterministic stages only -> outputs/checkpoint_03_1/
 python scripts/run_text_pipeline_seed.py     # checkpoint 03.2: full cascade, intent metrics, threshold grid -> outputs/checkpoint_03_2/
 python scripts/run_text_pipeline_seed.py --set heldout   # same pipeline on the frozen held-out set, no tuning
@@ -108,6 +109,20 @@ python scripts/benchmark_env.py --model minilm --warmup 1 --runs 3        # load
 python scripts/benchmark_env.py --model minilm_encode --warmup 1 --runs 5 # encode latency
 python -m src.normalizer                     # prints the normaliser rule table (report appendix)
 ```
+
+## Running the assistant
+
+```bash
+python app/app.py                       # local interface at http://127.0.0.1:7860
+python scripts/run_multimodal_eval.py --split dev        # 35 authored scenarios -> outputs/checkpoint_03_4/multimodal/dev/
+python scripts/run_multimodal_eval.py --split heldout    # 33 held-out scenarios, run once
+python scripts/run_multimodal_eval.py --split dev --confirm-image-only   # conservative image-only variant
+```
+
+Models load on the first question. Each turn appends one line to
+`outputs/logs/events.jsonl` (ids, decision, band, scores, flags, latency;
+no words, no media); an assistance request appends a ticket with a
+reference number to `outputs/logs/tickets.jsonl`.
 
 ## Running the vision and speech pipelines
 

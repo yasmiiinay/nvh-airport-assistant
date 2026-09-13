@@ -1,6 +1,6 @@
 # Dataset Schemas v1 (frozen 02C)
 
-Schemas only; population happens in Chats 03-04. Header-only manifest CSVs sit
+Schemas, populated during Chat 03 (see the checkpoint notes for counts). Header-only manifest CSVs sit
 in each data folder so collection starts by filling rows, not inventing columns.
 Controlled values (category, intent, query_type, split, decision outcomes) come
 from `data/vocabulary.json` and are validated by `scripts/audit_foundation.py`.
@@ -58,6 +58,12 @@ before the clip is scored, and they are not used for text evaluation.
 | split | `dev` \| `heldout` |
 | file | path relative to `data/audio/`, e.g. `files/aud_001.wav` (16 kHz mono WAV); added at the speech checkpoint |
 
+`data/audio/derived_manifest.csv` holds clips made from existing ones for
+the low-quality scenarios (same columns plus `derived_from` and
+`derivation`: a gain reduction below the loudness gate, or white noise at
+5 dB SNR). They are kept out of `audio_manifest.csv` so the speech
+evaluation figures do not change.
+
 Speaker codes `tts_<voice>` mark synthetic speech produced with the
 operating system's built-in voices; those clips are a separate stratum from
 human recordings and are reported as such, never mixed into a single WER.
@@ -75,9 +81,12 @@ local data folder, not in any interaction log.
 | query_id | text query id, or blank |
 | audio_id | audio id, or blank (exactly one of query_id/audio_id set when text/voice present) |
 | modality_condition | one of the six conditions in `evaluation/multimodal_metrics.CONDITIONS` |
-| intended_intent | controlled intent |
-| intended_entities | JSON object as string |
-| target_kb_id | expected record, blank for abstain/clarify/redirect cases |
+| scenario_type | the situation the case exercises (text_only, image_only, speech_only, text_image_consistent, text_image_conflict, speech_image_consistent, speech_image_conflict, deictic_text_image, oos_image, oos_text, volatile, action_request, low_quality_image, low_quality_audio) |
+| expected_route | the router rule expected to lead: text_only, voice_only, image_only, text_leads, voice_leads, image_leads, none |
+| expected_decision | answer \| clarify \| abstain \| redirect \| conflict |
+| target_kb_id | expected record, blank for abstain/clarify/redirect/conflict cases |
+| target_category | for clarify cases, the category the candidates must belong to |
+| expected_conflict | `true` when the modalities disagree and the disagreement must be surfaced |
 | consistency_label | `consistent` \| `conflict` \| `single_modality` |
 | conflict_type | blank, or `identifier_mismatch` (photo B12 + text B21), `category_mismatch` (baggage photo + lounge question) |
 | query_type | controlled query type |
