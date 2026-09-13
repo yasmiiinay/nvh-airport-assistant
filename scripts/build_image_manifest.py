@@ -10,9 +10,10 @@ Usage:
     python scripts/build_image_manifest.py --source commons --folder data/images/raw/aiga --labels data/images/labels_aiga.csv
     python scripts/build_image_manifest.py --source own_photo --folder data/images/raw/own --labels data/images/labels_own.csv
 
-Out-of-scope rows carry a note starting with `generic:` (no airport meaning)
-or `airport_adjacent:` (an airport symbol outside the vocabulary), which the
-vision evaluation reports separately.
+Out-of-scope rows carry a note starting with `generic:` (a symbol with no
+airport meaning), `airport_adjacent:` (an airport symbol outside the
+vocabulary) or `photo:` (an ordinary photograph, the wrong-upload case),
+which the vision evaluation reports separately.
 Files are copied unmodified to data/images/files/<image_id>.<ext>.
 """
 from __future__ import annotations

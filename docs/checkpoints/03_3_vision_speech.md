@@ -13,7 +13,7 @@ Summary of status at the end of the checkpoint:
 
 | Component | Status |
 |---|---|
-| Vision pipeline (`src/vision.py`) | IMPLEMENTED, EXECUTED on 94 labelled images (dev 37, held-out 57) in this workspace (§2b); MacBook re-run pending |
+| Vision pipeline (`src/vision.py`) | IMPLEMENTED, EXECUTED on 101 labelled images (dev 37, held-out 64) in this workspace (§2b); MacBook re-run pending |
 | Speech pipeline (`src/speech.py`) | IMPLEMENTED, VERIFIED: 120 synthetic clips (dev 100, held-out 20) run in this workspace and on the MacBook with identical transcripts and outcomes (§5) |
 | Human recordings | VERIFIED on 5 clips from one speaker, both machines (§5b); too few for a rate, reported as cases |
 | Vision thresholds | set on the dev images: 0.30 / 0.24 / 0.015 (§2b) |
@@ -109,11 +109,18 @@ crops show symbol families that appear in the dev pictograms (bar,
 aeroplane, parking, car rental), so the photo stratum tests the imaging
 condition, not new symbols.
 
+**Ordinary photographs (source `own_photo`, note `photo:`).** Seven of the
+author's own photographs with no airport content (flowers, a shop window
+of figurines, painted eggs in a basket, three sea and sky views, an
+evening sky): the wrong-upload case the anchors were written for. An eighth
+photograph was excluded because it shows a branded product, which the
+collection rules (Evidence Pack A1: no third-party logos) do not allow.
+
 **Splits.** Dev: 19 in-scope and 18 out-of-scope clean pictograms. Held-out:
-7 clean in-scope pictograms, 14 in-scope photo crops, 36 out-of-scope (20
-pictograms, 16 crops). Variants of one symbol (inverted, red, mirrored) are
-kept on the same side of the split. All 30 photo crops are held-out, so the
-thresholds were set on clean pictograms only.
+7 clean in-scope pictograms, 14 in-scope photo crops, 43 out-of-scope (20
+pictograms, 16 crops, 7 photographs). Variants of one symbol (inverted,
+red, mirrored) are kept on the same side of the split. All photographs and
+crops are held-out, so the thresholds were set on clean pictograms only.
 
 ## 2b. Vision results
 
@@ -151,11 +158,11 @@ strong matches; the choice is recorded, not claimed optimal.
 | Top-3 | 0.947 | 0.905 |
 | By stratum, top-1 | clean 0.95 | clean 0.71 (5/7), photo good light 0.92 (11/12), photo degraded 1.0 (2/2) |
 | In-scope bands | 12 strong (all correct), 6 uncertain (correct), 1 no-match (wrong) | 15 strong (all correct), 3 uncertain correct, 2 uncertain wrong, 1 strong wrong |
-| Out-of-scope images | 18 | 36 |
-| Out-of-scope marked by anchors | 0/18 | 2/36 (stairs; defocused escalator, both via "a blank or blurry image") |
-| Out-of-scope reaching "uncertain" or "no match" | 15/18 | 29/36 |
-| Out-of-scope given a "strong match" (wrong-confident) | 3/18 | 7/36 |
-| Wrong-confident rate over all images | 3/37 = 0.08 | 8/57 = 0.14 |
+| Out-of-scope images | 18 | 43 (36 pictograms and crops, 7 photographs) |
+| Out-of-scope marked by anchors | 0/18 | 9/43: photographs 7/7, pictograms 2/36 (stairs; defocused escalator, both via "a blank or blurry image") |
+| Out-of-scope reaching "uncertain" or "no match" | 15/18 | 36/43 |
+| Out-of-scope given a "strong match" (wrong-confident) | 3/18 | 7/43, all pictograms |
+| Wrong-confident rate over all images | 3/37 = 0.08 | 8/64 = 0.125 |
 
 Per category on held-out: gate 5/5, transport 5/5, baggage 2/2, restroom
 2/2, information 1/1, restaurant 3/4, check_in 0/2.
@@ -182,13 +189,18 @@ Per category on held-out: gate 5/5, transport 5/5, baggage 2/2, restroom
    sits at the softness of a phone photo of a screen. The flag is
    informational only, so nothing was lost, but the threshold should be
    re-examined on real signage photos before it drives any behaviour.
-4. **The out-of-scope anchors do not work on pictograms.** They describe
-   photographs ("a photograph of a person", "food on a plate", "a boarding
-   pass") and were designed for the wrong-upload case; a pictogram of a
-   barber is closer to "an airport sign for …" than to any of them. 0/18 on
-   dev and 2/36 on held-out were caught by anchors. What actually keeps
-   most out-of-scope symbols out of a confident answer is the margin rule:
-   29/36 on held-out ended in the uncertain or no-match band. The residual
+4. **The out-of-scope anchors work for the case they were written for and
+   not for pictograms.** All seven ordinary photographs were caught by an
+   anchor (the sea and sky views by "a landscape or city photograph", the
+   eggs by "food on a plate", the flowers and the shop window by "a blank or
+   blurry image", a semantically loose but correct result), and their
+   category scores (0.14 to 0.22) sat below `vision_tau_low` anyway, so
+   they would have reached "no reliable match" even without anchors. A
+   pictogram of a barber, by contrast, is closer to "an airport sign for …"
+   than to any photograph description: 0/18 on dev and 2/36 on held-out
+   pictograms were caught. What keeps most out-of-scope symbols out of a
+   confident answer is the margin rule: 29/36 on held-out ended in the
+   uncertain or no-match band. The residual
    7/36 wrong-confident cases are the main vision weakness: barber → 
    restroom, coat check → baggage, no entry → transport, litter →
    accessibility, arriving flights and heliport → baggage. A "strong match"
@@ -267,7 +279,7 @@ converting to 16 kHz mono WAV on macOS. Speaker codes are pseudonymous
 (`spk_01`, …). The runner takes `--speakers human` so their results are
 reported separately from the synthetic voices, never pooled.
 
-**Images.** See §2; 94 manifest rows, 64 pictograms and 30 photo crops.
+**Images.** See §2; 101 manifest rows: 64 pictograms, 30 photo crops, 7 photographs.
 
 ## 5. Speech results on the synthetic dev clips (100 clips, 5 voices × 20 utterances)
 
@@ -604,11 +616,12 @@ called.
 - 03.3 EXECUTED: five human clips (spk_01), 4 of 5 outcomes kept, the loss
   is the "belt + digit" class again; three spoken-only sentences declared in
   `data/text/queries_spoken.csv`. Too few for a rate.
-- 03.3 EXECUTED (workspace): vision on 94 labelled images. Dev top-1 0.947
-  (18/19), held-out 0.857 (18/21), top-3 0.905; photo crops 13/14; anchors
-  caught 2/54 out-of-scope images, the margin rule sent 44/54 to uncertain
-  or no-match, 10/54 got a wrong "strong match"; wrong-confident rate 0.08
-  dev, 0.14 held-out. Thresholds 0.30 / 0.24 / 0.015 set on dev; no prompt
+- 03.3 EXECUTED (workspace): vision on 101 labelled images. Dev top-1 0.947
+  (18/19), held-out 0.857 (18/21), top-3 0.905; photo crops 13/14. Out of
+  scope: ordinary photographs 7/7 caught by anchors; pictograms 2/54 caught
+  by anchors, 42/54 held to uncertain or no-match by the margin rule, 10/54
+  given a wrong "strong match"; wrong-confident rate 0.08 dev, 0.125
+  held-out. Thresholds 0.30 / 0.24 / 0.015 set on dev; no prompt
   revision. `security` and `accessibility`: BLOCKED BY DATA (no image).
 - 03.3 NOT YET VERIFIED on the MacBook: the two vision runs (expected to
   reproduce exactly; greedy, deterministic).
