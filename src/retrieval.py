@@ -302,6 +302,12 @@ def resolve_semantic(result: RetrievalResult, gaz: Gazetteers, index: TextIndex,
     result.ranked = ranked[:3]
     result.match_score, result.margin = round(score, 4), round(margin, 4)
     top_id = ranked[0][0]
+    if decision == "answer" and gaz.records[top_id].get("volatility") == "high":
+        # the live-information record only ever carries the redirect; it is
+        # never presented as an answer, whatever its similarity score
+        result.flags.append("volatile")
+        return _decide(result, stage, "redirect",
+                       f"top record {top_id} at {score:.2f} holds live information; redirecting", top_id)
     if decision == "clarify" and result.intent != NO_INTENT and \
             gaz.vocabulary["intents"][result.intent]["response_type"] == "assist":
         # assistance requests are answered with the nearest designated point
