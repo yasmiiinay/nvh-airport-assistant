@@ -35,13 +35,13 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 | `configs/` | The single `Settings` dataclass every script reads; thresholds live here and nowhere else. |
 | `data/kb/` | The synthetic knowledge base (`airport_kb.json`, 32 records). |
 | `data/images/`, `data/audio/`, `data/multimodal/` | Dataset manifests (header CSVs now; rows added in Chats 03–04 per `docs/dataset_schemas.md`). |
-| `data/text/` | Seed query set (`queries_seed.csv`, 43 rows) and the dev-only intent exemplars (`intent_exemplars.csv`, 95 phrasings for the 15 intents). |
+| `data/text/` | Seed query set (`queries_seed.csv`, 43 rows, dev), the held-out set (`queries_heldout.csv`, 36 rows, frozen before any run) and the dev-only intent exemplars (`intent_exemplars.csv`, 95 phrasings for the 15 intents). |
 | `data/vocabulary.json` | Frozen controlled vocabulary shared by image labels, intents, entities, KB categories and routing. |
 | `docs/` | Airport specification, dataset schemas, and project documents. |
 | `evaluation/` | Metric modules (pure functions now; model outputs plug in from the pipeline phase). |
 | `outputs/` | Everything generated (benchmarks, evaluation artefacts); git-ignored except `.gitkeep`. |
 | `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1 evidence), `run_text_pipeline_seed.py` (checkpoint 03.2 evidence). |
-| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision). |
+| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision), `responses.py` (template answers from record fields, with the caveat sentences each flag requires). |
 | `models/` | Local model copies (git-ignored). If `models/all-MiniLM-L6-v2/` exists it is used; otherwise the model is fetched from the Hugging Face hub on first use. |
 | `tests/` | Consistency gate plus unit tests per module (`python -m pytest tests`). |
 
@@ -100,9 +100,10 @@ Space deployable when that time comes.
 ## Running the text pipeline
 
 ```bash
-python -m pytest tests                       # 94 tests; the MiniLM ones skip if the model is unavailable
+python -m pytest tests                       # 105 tests; the MiniLM ones skip if the model is unavailable
 python scripts/run_deterministic_seed.py     # checkpoint 03.1: deterministic stages only -> outputs/checkpoint_03_1/
-python scripts/run_text_pipeline_seed.py     # checkpoint 03.2: full cascade, intent metrics, thresholds -> outputs/checkpoint_03_2/
+python scripts/run_text_pipeline_seed.py     # checkpoint 03.2: full cascade, intent metrics, threshold grid -> outputs/checkpoint_03_2/
+python scripts/run_text_pipeline_seed.py --set heldout   # same pipeline on the frozen held-out set, no tuning
 python scripts/benchmark_env.py --model minilm --warmup 1 --runs 3        # load time and RSS
 python scripts/benchmark_env.py --model minilm_encode --warmup 1 --runs 5 # encode latency
 python -m src.normalizer                     # prints the normaliser rule table (report appendix)

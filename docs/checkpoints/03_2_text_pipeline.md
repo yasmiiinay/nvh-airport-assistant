@@ -280,3 +280,142 @@ the same two commands there; none are claimed.
    `find_check_in` exemplars and re-run; report before/after on both splits.
 4. Run the two MiniLM benchmark commands on the MacBook and add the rows.
 5. CLIP and Whisper only after review of this checkpoint.
+
+---
+
+# Closure addendum (13 September 2026)
+
+Four steps were taken after the review of the checkpoint, in this order,
+each committed separately so the sequence is auditable. No change was made
+in response to the seven dev-set mismatches themselves.
+
+## A. Held-out text set, authored blind and frozen first
+
+`data/text/queries_heldout.csv`: 36 queries, all 15 intents plus `none`,
+22 answer / 6 clarify / 5 abstain / 3 redirect; types precise 10, ambiguous
+9, paraphrase 7, out_of_scope 3, volatile 3, vague 2, deictic 1,
+non_english 1. Written from new passenger situations (damaged bag, doctor,
+baby changing, cash machine, printing a boarding pass, a described sign
+without a photo, German, a gate number without a pier letter, two gates in
+one pier, a T2 question about a T1-only service). It passes the same audit
+as the seed file and a test asserts that no held-out query equals a seed
+query after normalisation and that token overlap with every seed query
+stays below 0.6 (the maximum is 0.50, h012 against q027, different
+intents). The file was committed (`396ccd7`) before the pipeline was run
+on it. The runner gained `--set heldout`; in that mode neither the
+threshold grid nor the cue experiment runs.
+
+## B. Frozen pipeline on the held-out set (before any revision)
+
+| | dev (43) | held-out (36) | gap |
+|---|---|---|---|
+| Outcome correct | 36 (0.837) | 24 (0.667) | −0.17 |
+| Deterministic stages alone | 22, 0 wrong | 15, 0 wrong | |
+| Semantic workload correct | 14 / 21 | 9 / 21 | |
+| Semantic decisions (answer / clarify / abstain / redirect) | 3 / 13 / 4 / 1 | 2 / 15 / 2 / 2 | |
+| Wrong-record answers | 0 | 1 (h019) | +1 |
+| False grounded negative | 0 | 1 (h024) | +1 |
+| Intent accuracy / macro F1 | 0.791 / 0.768 | 0.694 / 0.658 | −0.10 |
+
+Held-out outcome by type: precise 9/10, ambiguous 8/9, volatile 3/3,
+deictic 1/1, non-English 1/1, vague 1/2, paraphrase 1/7, out-of-scope 0/3.
+The deterministic stages generalise (15 decisions, none wrong; the exact,
+alias, redirect, grounded-negative and terminal-mismatch paths all fired as
+designed). The semantic stage does not generalise well on paraphrases: six
+of seven paraphrase queries ended in clarify because their top score stayed
+below `tau_high` (h010 0.29, h021 0.27, h026 0.37, h014 0.46, h036 0.63 with
+margin 0.08, h015 0.56 with margin 0.03). Out-of-scope handling failed on
+all three: h019 "baby changing facilities" was answered with a restroom
+record (0.56, margin 0.25), the first wrong-record answer of the project;
+h023 "nearest cash machine" and h030 "print my boarding pass" clarified at
+0.26 and 0.30, just above `tau_low`. Intent errors: 11 on 36 (list in
+`outputs/checkpoint_03_2/heldout/intent_report.json`), including three
+`none` queries absorbed by real intents.
+
+**h024 is judged "correct" by the lenient rule and is in fact wrong.** "How
+often does the shuttle to terminal 2 run" triggered the 03.1
+category-plus-terminal grounded negative ("no transport record in Terminal
+2") because the shuttle record is filed under Terminal 1 although it serves
+both. The judge credits a grounded negative whose alternatives contain the
+target; the passenger would read a false "no". This is a genuine 03.1
+defect in the grounded-negative rule for cross-terminal services, recorded
+here and left for the next phase rather than patched on the same day the
+held-out set was first run.
+
+## C. One declared exemplar revision
+
+Change: the two `find_check_in` exemplars that contained "flight" became
+"I have to check in where do I go" and "where can I hand in my luggage
+before departure". Nothing else was touched and nothing was re-tuned.
+
+| | dev before → after | held-out before → after |
+|---|---|---|
+| Intent accuracy | 0.791 → 0.814 | 0.694 → 0.722 |
+| Intent macro F1 | 0.768 → 0.782 | 0.658 → 0.697 |
+| Outcome correct | 36 → 35 | 24 → 24 |
+| Wrong-record answers | 0 → 1 (q004) | 1 → 2 (h019, h011) |
+
+The revision did what it targeted (find_gate→find_check_in and
+find_information→find_check_in confusions gone) and made outcomes no
+better. q004 "Where do I board my flight?" now has the right intent, and
+the right intent narrows the search to three near-identical gate records
+where pier B wins at 0.51 with a margin of 0.13, so the query is answered
+with a gate area instead of asking for the gate number. h011 "Where can I
+ask about flight connections?" gained the right intent (find_information)
+and then ranked the `flight_information` record first at 0.52. Intent
+accuracy and outcome quality are not the same thing; the report should
+show this pair.
+
+Baseline after the revision, same split: dev (40) TF-IDF+LR 0.825 / 0.800
+against MiniLM 0.850 / 0.796; held-out (33) TF-IDF+LR 0.727 / 0.722
+against MiniLM 0.788 / 0.752. The encoder is ahead on both after the
+revision, by two to three queries; with these sample sizes that is
+suggestive, not conclusive.
+
+## D. Defect fix from the held-out run: the live-information record is never an answer
+
+h011 exposed that the semantic stage could present `flight_information`
+(volatility high) as an answer. The freeze says that record exists only to
+carry the redirect. `resolve_semantic` now redirects whenever the top
+record has volatility `high`, keeping the similarity stage name so the
+stage counts stay honest. A regression test carries the h011 wording. After
+the fix: dev 35/43, held-out 24/36; wrong-record answers dev 1 (q004),
+held-out 1 (h019); h011 redirects (not the expected clarify, but not a
+false answer). The seed-set property test now names q004 as the one known
+wrong-record answer so that any new one fails the suite.
+
+## E. Minimal response assembly (`src/responses.py`)
+
+Template assembly from record fields only: name and location, description,
+directions, opening hours, availability note (rendered for medium and high
+volatility records, which is where "live queue times are not available"
+lives), accessibility flags and notes, nearest assistance point, contact,
+and a provenance line naming the record, its `last_verified` date and
+either the deterministic stage or the match score with the frozen
+disclaimer. Flags become sentences: `time_reference_no_clock` adds "I
+cannot see the current time, so I cannot say whether it is open right now";
+`grounded_negative` renders "There is no lounge in Terminal 2" plus the
+nearest alternative; `terminal_mismatch` renders "Car Park P1 is not at
+Terminal 2; it is at Terminal 1"; `assist_policy` introduces the designated
+point; redirect renders the official-source note and never a KB location.
+Two response-layer guards, both regex tables, both flagged in the result:
+an action request ("book", "reserve", "print", "rebook", ...) prefixes "I
+cannot book, reserve, print or arrange anything; I can only give
+information", so q039 and h030 no longer imply the system can act; a live
+status request ("queue", "waiting time", "how long", "busy") prefixes "I do
+not have live queue or waiting times", so q009 and h007 never carry an
+invented wait. Nine tests in `tests/test_responses.py` check field
+completeness on a deterministic answer, the absence of open/closed and
+wait-time claims, the redirect content, the grounded-negative and
+terminal-mismatch wording, both guards, and the score disclaimer on a
+semantic answer.
+
+## F. State at closure
+
+`python -m pytest tests`: **105 passed** (Linux, Python 3.11; MacBook run
+pending). Audit ALL 11 CHECKS PASS. Held-out set frozen at `396ccd7` and
+untouched since. Open items carried forward: the cross-terminal
+grounded-negative defect (h024); out-of-scope queries that land just above
+`tau_low` (h023, h030) and the one answered from a neighbouring category
+(h019); paraphrase recall of the semantic stage; the dev/held-out gap of
+0.17 in outcome accuracy, to be reported as such.
