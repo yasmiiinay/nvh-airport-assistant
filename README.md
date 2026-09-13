@@ -34,15 +34,15 @@ anywhere; EasyOCR is an optional, flag-gated enhancement.
 | `app/` | Gradio entrypoint; currently a hello-world used only as the Space deployment smoke test. |
 | `configs/` | The single `Settings` dataclass every script reads; thresholds live here and nowhere else. |
 | `data/kb/` | The synthetic knowledge base (`airport_kb.json`, 32 records). |
-| `data/images/`, `data/audio/`, `data/multimodal/` | Dataset manifests (header CSVs now; rows added in Chats 03–04 per `docs/dataset_schemas.md`). |
+| `data/images/`, `data/audio/`, `data/multimodal/` | Dataset manifests per `docs/dataset_schemas.md`. `data/audio/` holds 120 synthetic clips (five macOS voices reading 24 seed and held-out queries, `tts_utterances.csv`) plus any human recordings added with `scripts/add_recordings.py`; the image manifest is still empty. |
 | `data/text/` | Seed query set (`queries_seed.csv`, 43 rows, dev), the held-out set (`queries_heldout.csv`, 36 rows, frozen before any run) and the dev-only intent exemplars (`intent_exemplars.csv`, 95 phrasings for the 15 intents). |
 | `data/vocabulary.json` | Frozen controlled vocabulary shared by image labels, intents, entities, KB categories and routing. |
 | `docs/` | Airport specification, dataset schemas, and project documents. |
 | `evaluation/` | Metric modules (pure functions now; model outputs plug in from the pipeline phase). |
 | `outputs/` | Everything generated (benchmarks, evaluation artefacts); git-ignored except `.gitkeep`. |
-| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1 evidence), `run_text_pipeline_seed.py` (checkpoint 03.2 evidence). |
-| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision), `responses.py` (template answers from record fields, with the caveat sentences each flag requires). |
-| `models/` | Local model copies (git-ignored). If `models/all-MiniLM-L6-v2/` exists it is used; otherwise the model is fetched from the Hugging Face hub on first use. |
+| `scripts/` | Runnable utilities: `smoke_test.py`, `benchmark_env.py`, `audit_foundation.py`, `run_deterministic_seed.py` (checkpoint 03.1), `run_text_pipeline_seed.py` (checkpoint 03.2), `run_vision_eval.py` and `run_speech_eval.py` (checkpoint 03.3), and the dataset helpers `build_image_manifest.py`, `make_tts_audio.py`, `add_recordings.py`. |
+| `src/` | Pipeline code: `kb.py` (KB loading, identifier expansion), `foundation_audit.py`, `normalizer.py` (L1/L2 text normalisation), `entities.py` (regex + KB-derived gazetteers), `text_encoder.py` (MiniLM, loaded on first use), `intent.py` (intent by nearest exemplar), `retrieval.py` (the full text cascade: deterministic stages, then intent, category filter, cosine similarity and the score + margin decision), `responses.py` (template answers from record fields, with the caveat sentences each flag requires), `vision.py` (image checks, CLIP zero-shot ranking against category prompts, KB records and out-of-scope anchors), `speech.py` (audio gate, Whisper-base transcription, hand-off of the transcript into the same text cascade). |
+| `models/` | Local model copies (git-ignored): `all-MiniLM-L6-v2/`, `clip-vit-base-patch32/`, `whisper-base/`. A local copy is used when present; otherwise the hub id from `configs/settings.py` is fetched on first use. |
 | `tests/` | Consistency gate plus unit tests per module (`python -m pytest tests`). |
 
 ## Setup
@@ -100,7 +100,7 @@ Space deployable when that time comes.
 ## Running the text pipeline
 
 ```bash
-python -m pytest tests                       # 105 tests; the MiniLM ones skip if the model is unavailable
+python -m pytest tests                       # 138 tests; the MiniLM ones skip if the model is unavailable
 python scripts/run_deterministic_seed.py     # checkpoint 03.1: deterministic stages only -> outputs/checkpoint_03_1/
 python scripts/run_text_pipeline_seed.py     # checkpoint 03.2: full cascade, intent metrics, threshold grid -> outputs/checkpoint_03_2/
 python scripts/run_text_pipeline_seed.py --set heldout   # same pipeline on the frozen held-out set, no tuning
@@ -108,6 +108,24 @@ python scripts/benchmark_env.py --model minilm --warmup 1 --runs 3        # load
 python scripts/benchmark_env.py --model minilm_encode --warmup 1 --runs 5 # encode latency
 python -m src.normalizer                     # prints the normaliser rule table (report appendix)
 ```
+
+## Running the vision and speech pipelines
+
+```bash
+python scripts/run_speech_eval.py --split dev              # Whisper on the synthetic dev clips -> outputs/checkpoint_03_3/speech/dev_tts/
+python scripts/run_speech_eval.py --split heldout          # same on the held-out clips
+python scripts/run_speech_eval.py --split dev --speakers human   # human recordings only (after add_recordings.py)
+python scripts/run_vision_eval.py --split dev              # CLIP on the labelled images; writes STATUS.md while the manifest is empty
+python scripts/benchmark_env.py --model whisper --warmup 1 --runs 3
+python scripts/benchmark_env.py --model clip --warmup 1 --runs 3
+```
+
+Transcripts go through the same normaliser and entity extractor as typed
+text; the speech evaluation reports WER at both normalisation levels, the
+identifier tokens recovered, and how often the outcome reached from the
+transcript matches the outcome reached from the typed reference. The audio
+gate bounds (`audio_min_seconds` etc.) and the vision thresholds (unset until
+a labelled dev image split exists) are in `configs/settings.py`.
 
 Decision thresholds (`tau_high`, `tau_low`, `margin_delta`, `tau_intent`) live
 in `configs/settings.py` and were chosen on the 43-query dev split by the
