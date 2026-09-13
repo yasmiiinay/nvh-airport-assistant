@@ -13,10 +13,10 @@ Summary of status at the end of the checkpoint:
 
 | Component | Status |
 |---|---|
-| Vision pipeline (`src/vision.py`) | IMPLEMENTED, unit-tested with CLIP loaded; evaluation BLOCKED BY DATA (image manifest empty) |
+| Vision pipeline (`src/vision.py`) | IMPLEMENTED, EXECUTED on 94 labelled images (dev 37, held-out 57) in this workspace (§2b); MacBook re-run pending |
 | Speech pipeline (`src/speech.py`) | IMPLEMENTED, VERIFIED: 120 synthetic clips (dev 100, held-out 20) run in this workspace and on the MacBook with identical transcripts and outcomes (§5) |
-| Human recordings | EXECUTED on 5 clips from one speaker (§5b); too few for a rate, reported as cases |
-| Vision thresholds | unset by design until a labelled dev image split exists |
+| Human recordings | VERIFIED on 5 clips from one speaker, both machines (§5b); too few for a rate, reported as cases |
+| Vision thresholds | set on the dev images: 0.30 / 0.24 / 0.015 (§2b) |
 | Text results after this checkpoint | unchanged, verified byte-for-byte (§7) |
 
 ## 1. Vision: what was built
@@ -72,36 +72,140 @@ path for text on signs remains an optional enhancement (requirements-ocr)
 and is not part of this checkpoint. FAISS is not used at runtime: 11 + 6 +
 31 vectors are a single matrix product.
 
-## 2. Vision: what is known without images
+## 2. Vision: data
 
-Two observations were made on the text side of the index, which needs no
-images, and they set expectations for the evaluation:
+**Pictograms (source `commons`).** The AIGA/DOT symbol signs, fetched from
+the Wikimedia Commons category "AIGA symbol signs" with
+`scripts/fetch_wikimedia_category.py` as 512 px server-side PNG renderings
+(82 files, per-file licence recorded in `data/images/provenance_commons.csv`:
+public domain or CC0, one CC BY 2.5 file excluded). 64 of them are in the
+manifest with labels in `data/images/labels_aiga.csv`; the four non-AIGA
+icons in the category and the CC BY file are left out. Symbols were mapped
+to the vocabulary by their AIGA name (departing flights → `gate`, ticket
+purchase and baggage check-in → `check_in`, waiting room → `lounge`, bus,
+rail, taxi, car rental, parking → `transport`, and so on). Two vocabulary
+categories have no AIGA symbol at all, `security` and `accessibility`; they
+are BLOCKED BY DATA at category level and nothing is claimed about them.
 
-- The eleven category vectors are close to each other. Pairwise cosine
-  similarities between category prompt vectors lie in roughly 0.89 to 0.92,
-  because every prompt begins "an airport sign for …" and CLIP's text
-  space is dominated by that shared frame. The margins between the top two
-  categories will therefore be small in absolute terms, which is why the
-  vision thresholds are not copied from the text thresholds (0.50 / 0.25 /
-  0.10) but left unset until measured.
-- The anchors are much further from the category vectors than the
-  categories are from each other, so the out-of-scope test is expected to
-  fire cleanly on photographs of people, food or documents and to be weak
-  on images that are airport-like but not signs (a photo of a departures
-  board, a suitcase). That case is on the list for the labelled set.
+Out-of-scope images are of two kinds, marked in the manifest notes and
+reported separately: `generic:` symbols with no airport meaning (barber,
+cashier, coat check, escalator, exit, fire extinguisher, litter, mail, no
+smoking, no dogs, arrows, …) and `airport_adjacent:` symbols that belong in
+an airport but not in this vocabulary (arriving flights, customs,
+immigration, currency exchange, heliport, hotel information, water
+transport, and lost and found, whose KB category has no visual class). The
+second kind is the case predicted in the first draft of this document as
+the weak spot for photo-description anchors.
 
-Everything else about vision (top-1 / top-3 accuracy, the pictogram versus
-photographed-sign gap, the blur stratum, the anchor ablation, the confusion
-between visually similar symbols such as check-in and information) is
-BLOCKED BY DATA. `scripts/run_vision_eval.py` writes a STATUS.md saying so
-rather than a number, and the per-image, summary and confusion outputs it
-will produce are already exercised by the tests on synthetic vectors.
+**Photographs (source `own_photo`).** Ten phone photographs of the same
+symbols displayed on a laptop screen, taken by the project author, some
+deliberately angled or defocused. Single symbols were cropped from them (30
+crops, `data/images/labels_own.csv`, `modified: yes`): 14 in-scope, 16
+out-of-scope, strata `real_good_light` (21) and `real_degraded` (9). These
+are photographs of a screen, not of signage in situ: they carry moiré,
+softness, angle and defocus, but not the lighting, clutter and distance of
+a real terminal. They are also not independent of the pictogram set: most
+crops show symbol families that appear in the dev pictograms (bar,
+aeroplane, parking, car rental), so the photo stratum tests the imaging
+condition, not new symbols.
 
-Data path when images arrive: `data/images/labels_<source>.csv` (filename,
-category, split, quality stratum, optional identifier, notes) →
-`scripts/build_image_manifest.py --source aiga_dot|own_photo` → manifest
-rows → `run_vision_eval.py --split dev`, then thresholds, then a single run
-on `--split heldout`.
+**Splits.** Dev: 19 in-scope and 18 out-of-scope clean pictograms. Held-out:
+7 clean in-scope pictograms, 14 in-scope photo crops, 36 out-of-scope (20
+pictograms, 16 crops). Variants of one symbol (inverted, red, mirrored) are
+kept on the same side of the split. All 30 photo crops are held-out, so the
+thresholds were set on clean pictograms only.
+
+## 2b. Vision results
+
+**Two defects found by the first run, both fixed before any number was
+kept.** The first dev run reported top-1 0.42 with dozens of different
+symbols producing one identical embedding. The cause was the loader: the
+Commons PNGs are black shapes on a transparent background, and a plain RGB
+conversion drops the alpha channel, leaving an all-black image. Images with
+an alpha channel are now composited on white (`flatten_on_white`, with a
+test). The second was in the decision, not the data: the band was being
+decided on the record ranking, and since the KB holds one record per
+terminal for most categories, an image alone can never separate
+`checkin_t1` from `checkin_t2`; every image would have landed in the
+uncertain band by construction. The band is now decided on the category
+ranking, and the records of the top category are returned as a ranked
+candidate list for text or a follow-up question to narrow. That is a design
+correction the data forced, and it fixes what an image can decide: a kind
+of place, not which terminal's instance of it.
+
+**Thresholds** (`vision_tau_high` 0.30, `vision_tau_low` 0.24,
+`vision_margin_delta` 0.015), chosen on the dev split from an 18-cell grid.
+CLIP category scores on these images occupy a narrow band, correct 0.28 to
+0.37 and out-of-scope 0.26 to 0.36, so the score alone separates almost
+nothing; the top1−top2 margin does (median 0.028 for correct in-scope,
+0.005 for out-of-scope on dev). The chosen cell gives 12 strong / 6
+uncertain / 1 no-match on dev in-scope with every strong match correct,
+and 3 strong / 15 uncertain on dev out-of-scope. A stricter margin (0.020)
+would cut the out-of-scope strong matches to 2 at the cost of 2 correct
+strong matches; the choice is recorded, not claimed optimal.
+
+| Measure | Dev (clean pictograms) | Held-out |
+|---|---|---|
+| In-scope images | 19 | 21 (7 clean, 12 photo good light, 2 photo degraded) |
+| Top-1 category accuracy | 0.947 (18/19) | 0.857 (18/21) |
+| Top-3 | 0.947 | 0.905 |
+| By stratum, top-1 | clean 0.95 | clean 0.71 (5/7), photo good light 0.92 (11/12), photo degraded 1.0 (2/2) |
+| In-scope bands | 12 strong (all correct), 6 uncertain (correct), 1 no-match (wrong) | 15 strong (all correct), 3 uncertain correct, 2 uncertain wrong, 1 strong wrong |
+| Out-of-scope images | 18 | 36 |
+| Out-of-scope marked by anchors | 0/18 | 2/36 (stairs; defocused escalator, both via "a blank or blurry image") |
+| Out-of-scope reaching "uncertain" or "no match" | 15/18 | 29/36 |
+| Out-of-scope given a "strong match" (wrong-confident) | 3/18 | 7/36 |
+| Wrong-confident rate over all images | 3/37 = 0.08 | 8/57 = 0.14 |
+
+Per category on held-out: gate 5/5, transport 5/5, baggage 2/2, restroom
+2/2, information 1/1, restaurant 3/4, check_in 0/2.
+
+**Reading the results.**
+
+1. Category identification on clean pictograms works: 18/19 on dev, and the
+   one miss is a white symbol on a transparent background
+   (`aiga_railtransportation_25_white`), which after flattening on white is
+   a blank image; the "blank or blurry" anchor won and the image was marked
+   out of scope, which is the right behaviour for a blank image and a
+   labelling limitation rather than a model error.
+2. The held-out misses are interpretable. Both `check_in` images are the
+   AIGA "baggage check-in" symbol, a suitcase, and CLIP read them as
+   `baggage`; the manifest note predicted this confusion when the label
+   was written. The clean coffee-shop symbol went to `transport` with
+   `restaurant` third at a 0.008 margin (uncertain band, so no wrong
+   answer was given). The suitcase case is a real ambiguity a passenger
+   would also face, and it is the kind of case where text ("check-in" vs
+   "reclaim") should override the image in fusion.
+3. Photographs of the screen did not hurt category accuracy (11/12 in good
+   light, 2/2 defocused) and the blur flag fired on all 9 degraded crops,
+   but also on 6 of the 21 good-light crops: the Laplacian threshold of 60
+   sits at the softness of a phone photo of a screen. The flag is
+   informational only, so nothing was lost, but the threshold should be
+   re-examined on real signage photos before it drives any behaviour.
+4. **The out-of-scope anchors do not work on pictograms.** They describe
+   photographs ("a photograph of a person", "food on a plate", "a boarding
+   pass") and were designed for the wrong-upload case; a pictogram of a
+   barber is closer to "an airport sign for …" than to any of them. 0/18 on
+   dev and 2/36 on held-out were caught by anchors. What actually keeps
+   most out-of-scope symbols out of a confident answer is the margin rule:
+   29/36 on held-out ended in the uncertain or no-match band. The residual
+   7/36 wrong-confident cases are the main vision weakness: barber → 
+   restroom, coat check → baggage, no entry → transport, litter →
+   accessibility, arriving flights and heliport → baggage. A "strong match"
+   on a symbol the KB does not cover is exactly the false certainty the
+   ethics section has to discuss.
+5. No prompt revision was made and `_meta.revisions` stays empty. Any
+   anchor wording added now (stairs, arrows, shops) would be written with
+   the labelled out-of-scope set in view, including the held-out half, and
+   would measure the author's knowledge of the test set rather than the
+   method. The honest options for Chat 04 are a pictogram-style anchor set
+   written from the vocabulary alone before looking at images, or the
+   fusion rule that an image-only "strong match" still asks the passenger
+   to confirm the category when no text or voice agrees with it.
+6. `security` and `accessibility` have no in-scope image at all, so nothing
+   is known about them; both are predicted as runner-up categories often
+   (accessibility second for escalators, litter, restrooms), which suggests
+   the "person in a wheelchair" prompt attracts any human figure.
 
 ## 3. Speech: what was built
 
@@ -163,7 +267,7 @@ converting to 16 kHz mono WAV on macOS. Speaker codes are pseudonymous
 (`spk_01`, …). The runner takes `--speakers human` so their results are
 reported separately from the synthetic voices, never pooled.
 
-**Images (BLOCKED BY DATA).** `data/images/images_manifest.csv` has no rows.
+**Images.** See §2; 94 manifest rows, 64 pictograms and 30 photo crops.
 
 ## 5. Speech results on the synthetic dev clips (100 clips, 5 voices × 20 utterances)
 
@@ -414,6 +518,12 @@ the ones that go into the report.
   letter-free transcript ("……") is rejected as "no speech recognised", and
   the loudness gate stays as the first line. Hallucinated real words on
   noise are not caught by this and are noted as a limitation.
+- **Transparent pictograms loaded as all-black images** (§2b): the first
+  vision run scored 0.42 with one shared embedding for dozens of files;
+  fixed by compositing on white, with a test.
+- **Vision band decided on twin records** (§2b): an image cannot choose a
+  terminal; the band now comes from the category ranking and the records of
+  that category are returned as candidates.
 - **Gate minimum too strict** (§7).
 - **First-clip latency reported as the model load** (§7).
 - **Benchmark `device` column** said `mps` on the MacBook while every loader
@@ -428,7 +538,8 @@ Added or changed in this checkpoint: `test_vision.py` (10: image checks and
 refusals, index construction from prompts and KB, ranking and margin on
 synthetic vectors, anchors marking an image out of scope, bands only when
 thresholds exist, CLIP embedding shape and normalisation),
-`test_speech.py` (9: duration and loudness gates including the 0.9 s case,
+`test_vision.py` also gained the transparency test and the category-band
+test (11 in total); `test_speech.py` (9: duration and loudness gates including the 0.9 s case,
 stereo 44.1 kHz load and resample, unreadable file, the shared normaliser
 on transcripts, hand-off reaching the exact-identifier stage with a stand-in
 transcriber, rejected clip never calls the transcriber, letter-free
@@ -449,8 +560,12 @@ negatives), `test_scripts_compile.py` (every script compiles and imports).
   the measures that speak to the system's behaviour.
 - The Turkish clip is one utterance; the "non-English input" finding is a
   single case, not a rate.
-- Vision has no measured number at all yet. The prompt-space observation in
-  §2 is an expectation, not a result.
+- The image set is small (19 dev, 21 held-out in-scope), two categories
+  have no image, and the photographs are of a screen rather than of
+  terminal signage; the numbers in §2b are first measurements with wide
+  uncertainty, and the photo stratum shares symbol families with dev.
+- Out-of-scope handling for pictograms rests on the margin rule alone; the
+  anchors as written do not fire on them.
 - Whisper-small, a domain prompt, or beam search were not compared.
 
 ## 12. Recommendation for the next phase
@@ -462,8 +577,11 @@ gate outcome, raw and normalised transcripts and identifiers, so the router
 can decide on transcript quality (identifier found, letters ratio, gate
 flags) without re-transcribing; the vision result carries category and
 record rankings, out-of-scope, band and quality flags, which is everything
-the image + text disagreement analysis needs. Nothing in either module
-should need to change for fusion beyond being called.
+the image + text disagreement analysis needs; the record ranking is now
+restricted to the top category, so fusion's job on the image side is
+terminal disambiguation and category confirmation, not record search.
+Nothing in either module should need to change for fusion beyond being
+called.
 
 # PROJECT STATE — CHECKPOINT 03.3
 
@@ -486,12 +604,21 @@ should need to change for fusion beyond being called.
 - 03.3 EXECUTED: five human clips (spk_01), 4 of 5 outcomes kept, the loss
   is the "belt + digit" class again; three spoken-only sentences declared in
   `data/text/queries_spoken.csv`. Too few for a rate.
-- 03.3 BLOCKED BY DATA: vision evaluation and vision thresholds (image
-  manifest empty). Data path is ready (§2).
+- 03.3 EXECUTED (workspace): vision on 94 labelled images. Dev top-1 0.947
+  (18/19), held-out 0.857 (18/21), top-3 0.905; photo crops 13/14; anchors
+  caught 2/54 out-of-scope images, the margin rule sent 44/54 to uncertain
+  or no-match, 10/54 got a wrong "strong match"; wrong-confident rate 0.08
+  dev, 0.14 held-out. Thresholds 0.30 / 0.24 / 0.015 set on dev; no prompt
+  revision. `security` and `accessibility`: BLOCKED BY DATA (no image).
+- 03.3 NOT YET VERIFIED on the MacBook: the two vision runs (expected to
+  reproduce exactly; greedy, deterministic).
 - Text pipeline: untouched in behaviour; two observed normaliser rules
   added with byte-identical text outputs; gate minimum 0.5 s.
-- Carried to Chat 04: single-candidate threshold (text h019 + speech
-  aud_044); h024 cross-terminal grounded negative; out-of-scope near
+- Carried to Chat 04: pictogram-style out-of-scope anchors written from the
+  vocabulary before looking at images, or a fusion rule that an image-only
+  strong match is confirmed by the passenger; the check-in/baggage suitcase
+  ambiguity as a text-overrides-image scenario; blur threshold on real
+  signage; single-candidate threshold (text h019 + speech aud_044); h024 cross-terminal grounded negative; out-of-scope near
   `tau_low`; paraphrase recall; twin-record margins; anticipated-rule
   removal decision after more human recordings; optional Whisper-small
   comparison; check of the −45 dBFS floor against more human clips;
