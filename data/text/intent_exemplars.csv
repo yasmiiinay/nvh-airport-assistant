@@ -9,9 +9,9 @@ find_gate,where is the gate for boarding,dev
 find_check_in,where do I drop my bags and get a boarding pass,dev
 find_check_in,which desks are for check in,dev
 find_check_in,where is the check in hall,dev
-find_check_in,I have to check in for my flight where do I go,dev
+find_check_in,I have to check in where do I go,dev
 find_check_in,where is desk 210,dev
-find_check_in,where can I hand in my luggage before the flight,dev
+find_check_in,where can I hand in my luggage before departure,dev
 find_security,where is the security checkpoint,dev
 find_security,where do I go through screening,dev
 find_security,which security lane should I use,dev
