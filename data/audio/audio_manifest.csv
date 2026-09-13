@@ -119,3 +119,8 @@ aud_117,h001,tts_rishi,Gate A11 please,quiet,clean,A11,gates_pier_a,heldout,file
 aud_118,h004,tts_rishi,I have desk 225 on my ticket which terminal is that?,quiet,clean,DESK 225,checkin_t2,heldout,files/aud_118.wav
 aud_119,h008,tts_rishi,Which belts serve terminal 2 arrivals?,quiet,clean,,baggage_reclaim_t2,heldout,files/aud_119.wav
 aud_120,h027,tts_rishi,Is flight LH 2004 boarding yet?,quiet,clean,,flight_information,heldout,files/aud_120.wav
+aud_121,q001,spk_01,Where is gate B12?,quiet,clean,B12,gates_pier_b,dev,files/aud_121.wav
+aud_122,q002,spk_01,How do I get to A7,quiet,clean,A7,gates_pier_a,dev,files/aud_122.wav
+aud_123,q003,spk_01,gate c3?,quiet,clean,C3,gates_pier_c,dev,files/aud_123.wav
+aud_124,q004,spk_01,Where do I board my flight?,quiet,clean,,,dev,files/aud_124.wav
+aud_125,q005,spk_01,Where can I check in?,quiet,clean,,,dev,files/aud_125.wav
