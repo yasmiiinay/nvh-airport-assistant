@@ -11,6 +11,10 @@ Usage:
     python scripts/benchmark_env.py --model noop
     python scripts/benchmark_env.py --model minilm --warmup 1 --runs 3
     python scripts/benchmark_env.py --model minilm_encode --warmup 1 --runs 5
+    python scripts/benchmark_env.py --model clip --warmup 1 --runs 3
+    python scripts/benchmark_env.py --model clip_encode --warmup 1 --runs 5
+    python scripts/benchmark_env.py --model whisper --warmup 1 --runs 3
+    python scripts/benchmark_env.py --model whisper_transcribe --warmup 1 --runs 5
 Output: appends one row to outputs/env_benchmark.csv
 """
 from __future__ import annotations
@@ -66,16 +70,60 @@ def _encode_minilm():
     return encode(ENCODE_PROBES)
 
 
-# Still to add as the models enter the pipeline:
-#   clip      -> transformers CLIPModel + processor (SETTINGS.clip_model_id)
-#   whisper   -> transformers ASR pipeline (SETTINGS.whisper_model_id)
-#   easyocr   -> easyocr.Reader(['en'], gpu=False)  [only if SETTINGS.enable_ocr]
+def _local_or_hub(model_id: str) -> str:
+    local_copy = SETTINGS.models_dir / model_id.split("/")[-1]
+    return str(local_copy) if local_copy.exists() else model_id
+
+
+def _load_clip():
+    """Cold load of CLIP model and processor, a fresh object every run."""
+    from transformers import CLIPModel, CLIPProcessor
+    source = _local_or_hub(SETTINGS.clip_model_id)
+    return CLIPModel.from_pretrained(source).eval(), CLIPProcessor.from_pretrained(source)
+
+
+def _encode_clip():
+    """Warm inference: one 224x224 synthetic image plus the category prompts
+    through the shared encoder (the warm-up run absorbs the load)."""
+    import numpy as np
+    from PIL import Image
+    from src.vision import embed_images, embed_texts, load_prompts
+    image = Image.fromarray((np.random.default_rng(0).random((224, 224, 3)) * 255).astype("uint8"))
+    prompts = load_prompts(SETTINGS.vision_prompts_path)
+    embed_texts([p for ps in prompts["categories"].values() for p in ps])
+    return embed_images([image])
+
+
+def _load_whisper():
+    """Cold load of the Whisper-base ASR pipeline, a fresh object every run."""
+    from transformers import pipeline
+    return pipeline("automatic-speech-recognition", model=_local_or_hub(SETTINGS.whisper_model_id), device="cpu")
+
+
+def _transcribe_whisper():
+    """Warm inference on a fixed probe: data/audio/probe.wav if present,
+    otherwise three seconds of a quiet tone (timing only; the text is
+    meaningless for a tone and is discarded)."""
+    import numpy as np
+    from src.speech import load_audio, transcribe
+    probe = SETTINGS.kb_path.parents[1] / "audio" / "probe.wav"
+    if probe.exists():
+        samples, rate = load_audio(probe)
+    else:
+        rate = SETTINGS.audio_sample_rate
+        samples = (0.05 * np.sin(np.arange(3 * rate) / 10)).astype(np.float32)
+    return transcribe(samples, rate)
+
+
+# easyocr -> easyocr.Reader(['en'], gpu=False), only if the OCR enhancement is enabled
 LOADERS = {
     "noop": _load_noop,
     "minilm": _load_minilm,
     "minilm_encode": _encode_minilm,
-    "clip": None,
-    "whisper": None,
+    "clip": _load_clip,
+    "clip_encode": _encode_clip,
+    "whisper": _load_whisper,
+    "whisper_transcribe": _transcribe_whisper,
     "easyocr": None,
 }
 
@@ -87,6 +135,7 @@ DEVICE_USED = "cpu"
 
 
 def detect_device() -> str:
+    try:
         import torch
         mps = getattr(torch.backends, "mps", None)
         return "mps" if (mps and torch.backends.mps.is_available()) else "cpu"
