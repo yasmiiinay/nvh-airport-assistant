@@ -92,13 +92,29 @@ def load_whisper():
     return _asr
 
 
+MAX_NEW_TOKENS = 64   # a passenger query is a sentence or two; see the docstring below
+
+
 def transcribe(samples: np.ndarray, rate: int) -> str:
     """Raw Whisper text, English forced so that a non-English utterance is
-    transcribed as best-effort English rather than translated or skipped."""
+    transcribed as best-effort English rather than translated or skipped.
+
+    Decoding is capped at MAX_NEW_TOKENS. Measured on this project's CPU
+    environment, a pure tone that passes the loudness gate made Whisper-base
+    emit punctuation until its 448-token limit (about 31 s); the cap bounds
+    that to a few seconds without touching real queries, which are far
+    shorter than 64 tokens."""
     asr = load_whisper()
     out = asr({"raw": samples, "sampling_rate": rate},
-              generate_kwargs={"language": "english", "task": "transcribe"})
+              generate_kwargs={"language": "english", "task": "transcribe",
+                               "max_new_tokens": MAX_NEW_TOKENS})
     return out["text"].strip()
+
+
+def has_speech_text(text: str) -> bool:
+    """Whisper emits runs of dots or dashes for non-speech input; a transcript
+    with no letters is treated as no speech."""
+    return any(ch.isalpha() for ch in text)
 
 
 # ---------------------------------------------------------------------------
@@ -139,4 +155,9 @@ def process_audio(path: str | Path, gaz, index, thresholds: dict) -> SpeechResul
     result = SpeechResult(path=str(path), check=check)
     if not check.ok:
         return result
-    return process_transcript(result, transcribe(samples, rate), gaz, index, thresholds)
+    text = transcribe(samples, rate)
+    if not has_speech_text(text):
+        result.transcript_raw = text
+        result.check.ok, result.check.problem = False, "no speech recognised"
+        return result
+    return process_transcript(result, text, gaz, index, thresholds)

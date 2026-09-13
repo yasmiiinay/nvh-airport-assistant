@@ -100,6 +100,18 @@ def test_failed_gate_skips_transcription(gaz, tmp_path, monkeypatch):
     assert set(result.as_dict()) >= {"check", "transcript_raw", "transcript_l2", "identifiers", "retrieval"}
 
 
+def test_non_speech_transcript_is_rejected_after_the_gate(gaz, tmp_path, monkeypatch):
+    """A tone passes the loudness gate; Whisper answers with dots. That must
+    end as a rejected clip, not as a query to the text cascade."""
+    path = tmp_path / "tone.wav"
+    write_wav(path, tone(2.0))
+    monkeypatch.setattr(speech, "transcribe", lambda samples, rate: "........")
+    result = speech.process_audio(path, gaz, None, SETTINGS.thresholds())
+    assert not result.check.ok and result.check.problem == "no speech recognised"
+    assert result.retrieval is None
+    assert speech.has_speech_text("Where is gate B12?") and not speech.has_speech_text("... --- ...")
+
+
 # ---- Whisper needed ----
 
 @pytest.fixture(scope="module")
@@ -111,9 +123,12 @@ def asr():
         pytest.skip(f"Whisper not available here: {type(exc).__name__}")
 
 
-def test_whisper_returns_text_for_a_tone(asr):
+def test_whisper_tone_is_bounded_and_not_speech(asr):
+    import time
+    start = time.perf_counter()
     text = speech.transcribe(tone(2.0), RATE)
-    assert isinstance(text, str)
+    assert time.perf_counter() - start < 30            # the token cap keeps non-speech decoding short
+    assert isinstance(text, str) and not speech.has_speech_text(text)
 
 
 if __name__ == "__main__":
