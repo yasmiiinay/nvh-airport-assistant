@@ -12,8 +12,11 @@ import app as ui
 from src import event_log
 
 
-def test_page_builds():
-    assert isinstance(ui.build_ui(), gr.Blocks)
+def test_page_builds_and_keeps_uploaded_images_as_they_are():
+    demo = ui.build_ui()
+    assert isinstance(demo, gr.Blocks)
+    photo = next(c for c in demo.blocks.values() if getattr(c, "elem_id", None) == "photo")
+    assert photo.image_mode is None     # a transparent pictogram must not become a black square
 
 
 def test_empty_input_is_a_message_not_a_traceback():

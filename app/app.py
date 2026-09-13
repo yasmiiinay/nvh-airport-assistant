@@ -94,7 +94,9 @@ def evidence_markdown(outcome: Outcome, gaz) -> str:
     if outcome.candidates:
         lines.append("**Candidates:** " + ", ".join(gaz.records[r]["name"] for r in outcome.candidates if r in gaz.records))
     if outcome.conflict:
-        lines.append(f"**Conflict:** {outcome.conflict_detail}")
+        d = outcome.conflict_detail
+        lines.append(f"**Conflict:** words point to {d.get('text_record') or ', '.join(d.get('text_categories', []))}; "
+                     f"photo points to {d.get('image_category')}; resolution: {d.get('resolution')}")
     if outcome.flags:
         lines.append("**Flags:** " + ", ".join(outcome.flags))
     lines.append("Scores are cosine similarities: a measure of closeness, not a probability that the answer is right.")
@@ -144,8 +146,8 @@ def answer(text, image_path, audio_path, session):
     transcript = ""
     if outcome.speech is not None:
         transcript = outcome.speech.transcript_raw or f"(clip rejected: {outcome.speech.check.problem})"
-    return (response, band_text(outcome), ROUTE_LABELS.get(outcome.route, outcome.route), transcript,
-            evidence_markdown(outcome, ctx.gaz), session)
+    return (response.replace("\n", "\n\n"), band_text(outcome), ROUTE_LABELS.get(outcome.route, outcome.route),
+            transcript, evidence_markdown(outcome, ctx.gaz), session)
 
 
 def request_assistance(note, session):
@@ -180,7 +182,7 @@ CSS = """
 #header h1 { margin: 0; font-size: 1.5rem; letter-spacing: 0.02em; }
 #header p { margin: 0.2rem 0 0 0; opacity: 0.8; }
 #notice { border-left: 4px solid #7a7a7a; padding: 0.4rem 0.8rem; margin: 0.4rem 0 0.8rem 0; }
-#response { min-height: 12rem; line-height: 1.5; }
+#response { min-height: 6rem; line-height: 1.5; }
 .status-box textarea { font-weight: 600; }
 footer { display: none !important; }
 """
@@ -201,8 +203,10 @@ def build_ui() -> gr.Blocks:
             with gr.Column(scale=5):
                 text_in = gr.Textbox(label="Your question", placeholder="For example: Where is gate B12?",
                                      lines=2, elem_id="question")
+                # image_mode=None keeps the file as uploaded: the default RGB conversion
+                # turns a transparent pictogram into a black square before it reaches us
                 image_in = gr.Image(label="Photo of a sign (optional)", type="filepath", sources=["upload"],
-                                    height=220, elem_id="photo")
+                                    image_mode=None, height=220, elem_id="photo")
                 audio_in = gr.Audio(label="Or ask by voice (optional)", type="filepath",
                                     sources=["microphone", "upload"], elem_id="voice")
                 with gr.Row():
@@ -211,7 +215,7 @@ def build_ui() -> gr.Blocks:
             with gr.Column(scale=6):
                 response = gr.Markdown(label="Answer", value="", elem_id="response")
                 with gr.Row():
-                    band = gr.Textbox(label="Match band", value="Not scored", interactive=False,
+                    band = gr.Textbox(label="Match band", value="Not scored", interactive=False, lines=2,
                                       elem_classes=["status-box"], elem_id="band")
                     source = gr.Textbox(label="Evidence used", value="", interactive=False, elem_id="source")
                 transcript = gr.Textbox(label="What I heard (voice input)", value="", interactive=False,
