@@ -13,7 +13,7 @@ Summary of status at the end of the checkpoint:
 
 | Component | Status |
 |---|---|
-| Vision pipeline (`src/vision.py`) | IMPLEMENTED, EXECUTED on 101 labelled images (dev 37, held-out 64) in this workspace (§2b); MacBook re-run pending |
+| Vision pipeline (`src/vision.py`) | IMPLEMENTED, VERIFIED: 101 labelled images (dev 37, held-out 64) run in this workspace and on the MacBook with identical results (§2b) |
 | Speech pipeline (`src/speech.py`) | IMPLEMENTED, VERIFIED: 120 synthetic clips (dev 100, held-out 20) run in this workspace and on the MacBook with identical transcripts and outcomes (§5) |
 | Human recordings | VERIFIED on 5 clips from one speaker, both machines (§5b); too few for a rate, reported as cases |
 | Vision thresholds | set on the dev images: 0.30 / 0.24 / 0.015 (§2b) |
@@ -50,13 +50,13 @@ record.
 anchors and records by cosine similarity. The anchors compete in the same
 ranking as the categories: when the best anchor beats the best category the
 image is marked out of scope, which is the mechanism the Architecture
-Freeze calls for instead of a bare similarity floor. The category and
-record rankings then pass through the same `decide()` function as text,
-with a separate vision threshold triple, and the decision is translated
-into the three user-facing bands (strong match / uncertain, please confirm
-/ no reliable match). The vision thresholds are `None` in settings; the
-band is only produced when they are set, and they will be set on the dev
-image split alone.
+Freeze calls for instead of a bare similarity floor. The category ranking
+then passes through the same `decide()` function as text, with a separate
+vision threshold triple, and the decision is translated into the three
+user-facing bands (strong match / uncertain, please confirm / no reliable
+match); the records of the top category are returned as a ranked candidate
+list (§2b explains why the band is not decided on records). The thresholds
+were `None` until the dev image split existed and were set on it alone.
 
 **Prompt file.** `data/vision_prompts.json` carries the prompt wording, the
 anchors and a `_meta.revisions` list that is empty. Any rewording is a
@@ -598,8 +598,8 @@ called.
 # PROJECT STATE — CHECKPOINT 03.3
 
 - Repository: `github.com/yasmiiinay/nvh-airport-assistant`, branch `main`,
-  pushed from the MacBook through `059e102` (human recordings) plus the
-  correction commit that follows. Every commit under the project owner's
+  pushed from the MacBook through `606ecc0`; this closure note is the
+  commit after it. Checkpoint 03.3 CLOSED. Every commit under the project owner's
   identity, short messages.
 - Closed: 03.1 deterministic core; 03.2 text intelligence, semantic
   retrieval, response assembly (dev 35/43, held-out 24/36, frozen).
@@ -623,8 +623,9 @@ called.
   given a wrong "strong match"; wrong-confident rate 0.08 dev, 0.125
   held-out. Thresholds 0.30 / 0.24 / 0.015 set on dev; no prompt
   revision. `security` and `accessibility`: BLOCKED BY DATA (no image).
-- 03.3 NOT YET VERIFIED on the MacBook: the two vision runs (expected to
-  reproduce exactly; greedy, deterministic).
+- All 03.3 measurements reproduced exactly on the MacBook (speech dev and
+  held-out, human clips, vision dev and held-out); latency and memory
+  figures are the MacBook's.
 - Text pipeline: untouched in behaviour; two observed normaliser rules
   added with byte-identical text outputs; gate minimum 0.5 s.
 - Carried to Chat 04: pictogram-style out-of-scope anchors written from the
