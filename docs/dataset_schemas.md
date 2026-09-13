@@ -37,12 +37,18 @@ query_id, query, intent, entities_json (JSON object as string), target_kb_id
 (blank allowed only when expected_behaviour ≠ answer), query_type, expected_behaviour
 (decision outcome), split, notes.
 
+`data/text/queries_heldout.csv` (36 rows, frozen before any run) and
+`data/text/queries_spoken.csv` share the schema. The spoken file holds
+sentences a speaker chose at recording time that are not in either text
+set (`s###` ids); they are declared there, with their expected outcome,
+before the clip is scored, and they are not used for text evaluation.
+
 ## 3. Audio dataset — data/audio/audio_manifest.csv
 
 | Field | Meaning |
 |---|---|
 | audio_id | `aud_###`, unique |
-| query_id | the text query this utterance realises (WER reference = that query's reference_transcript) |
+| query_id | the text query this utterance realises: `q###` seed, `h###` held-out or `s###` spoken (WER reference = reference_transcript) |
 | speaker_id | pseudonymous code `spk_01`… — **never names** (GDPR minimisation; consent forms stored outside the repo) |
 | reference_transcript | exact words spoken, human-verified |
 | environment | `quiet` \| `cafe_noise` \| `announcement_noise` (playback-added noise, documented) |

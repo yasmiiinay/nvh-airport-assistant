@@ -2,7 +2,10 @@
 
 Put the recordings in a folder named `<query_id>__<speaker>.<ext>`, for
 example `q001__spk_01.m4a` or `h004__spk_02.wav` (the query id is matched
-case-insensitively). The reference transcript
+case-insensitively). A sentence the speaker chose that is not in the seed
+or held-out set goes into data/text/queries_spoken.csv first, with an
+`s###` id, so that the reference transcript and expected outcome are
+declared before the clip is scored. The reference transcript
 is the query text from the seed or held-out file, so speak it as written.
 Non-WAV files are converted with afconvert (macOS) to 16 kHz mono WAV;
 on other systems provide WAV files directly.
@@ -44,7 +47,8 @@ def main() -> int:
     parser.add_argument("--noise", default="clean", choices=["clean", "moderate", "heavy"])
     args = parser.parse_args()
     gaz = load_gazetteers(SETTINGS.kb_path, SETTINGS.vocabulary_path)
-    queries = {q["query_id"]: q for q in load_queries(SETTINGS.queries_seed_path) + load_queries(SETTINGS.queries_heldout_path)}
+    queries = {q["query_id"]: q for path in (SETTINGS.queries_seed_path, SETTINGS.queries_heldout_path, SETTINGS.queries_spoken_path)
+               for q in load_queries(path)}
     with open(MANIFEST, encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = reader.fieldnames

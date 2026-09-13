@@ -14,8 +14,8 @@ Summary of status at the end of the checkpoint:
 | Component | Status |
 |---|---|
 | Vision pipeline (`src/vision.py`) | IMPLEMENTED, unit-tested with CLIP loaded; evaluation BLOCKED BY DATA (image manifest empty) |
-| Speech pipeline (`src/speech.py`) | IMPLEMENTED, EXECUTED on 120 synthetic clips (dev 100, held-out 20) in this workspace; MacBook run pending |
-| Human recordings | NOT YET EVALUATED (none received yet; tooling ready) |
+| Speech pipeline (`src/speech.py`) | IMPLEMENTED, VERIFIED: 120 synthetic clips (dev 100, held-out 20) run in this workspace and on the MacBook with identical transcripts and outcomes (§5) |
+| Human recordings | EXECUTED on 5 clips from one speaker (§5b); too few for a rate, reported as cases |
 | Vision thresholds | unset by design until a labelled dev image split exists |
 | Text results after this checkpoint | unchanged, verified byte-for-byte (§7) |
 
@@ -167,10 +167,11 @@ reported separately from the synthetic voices, never pooled.
 
 ## 5. Speech results on the synthetic dev clips (100 clips, 5 voices × 20 utterances)
 
-Workspace CPU (Linux x86_64, Python 3.11, transformers pipeline); the
-MacBook run will replace the latency numbers and should reproduce
-everything else exactly, since decoding is greedy and the cascade is
-deterministic.
+Run in this workspace (Linux x86_64, Python 3.11) and on the MacBook
+(arm64, Python 3.14, CPU). Every count below (WER components, identifier
+accuracy, propagation, failure types) is identical on the two machines, as
+expected from greedy decoding and a deterministic cascade; only latency
+differs and both values are given.
 
 | Measure | Value |
 |---|---|
@@ -187,7 +188,7 @@ deterministic.
 | Transcript changed after L2 | 22 / 100, of which 18 kept the right outcome |
 | Lost to transcription (typed right, transcript wrong) | 4 |
 | Wrong-confident answers from a transcript | 1 (aud_044, §6) |
-| Latency per clip, warmed up | median 1.46 s, max 2.64 s (warm-up 11.3 s) |
+| Latency per clip, warmed up | workspace median 1.46 s, max 2.64 s (warm-up 11.3 s); MacBook median 0.34 s, max 0.85 s (warm-up 4.9 s) |
 
 Per voice (20 clips each):
 
@@ -212,6 +213,56 @@ are excluded from the "lost" count by construction.
 
 L2 recovers two words over L1 (466 versus 464 hits), which is exactly the
 two observed rules added in §7. No anticipated rule fired.
+
+Held-out split (20 clips, 4 utterances × 5 voices), both machines: WER
+0.092 (9 substitutions, 3 insertions, 130 reference words), identifier
+accuracy 0.70 (7/10), typed 20 → transcript 17, gap 0.15, three losses,
+all identifier errors, all ending in abstain or clarify; MacBook median
+latency 0.41 s.
+
+## 5b. Human recordings (5 clips, one speaker, MacBook microphone)
+
+Five sentences recorded by the project author (`spk_01`) in a quiet room,
+converted with `add_recordings.py`. The first attempt at scoring them gave
+WER 1.0 and 0 of 5 outcomes, which turned out to be a labelling error, not
+a speech result: the files were numbered by the speaker's own list
+(Q001–Q005) while the script read those numbers as seed-query ids. Three
+of the five sentences were not in either text set at all. They were
+declared afterwards in `data/text/queries_spoken.csv` (`s001` "Where is
+belt 9?", `s002` "Baggage claim terminal 2", `s003` "gate c1"), with intent,
+entities and expected outcome, and the manifest rows were corrected before
+re-scoring. The error and the correction are recorded because the wrong
+number was briefly real output; the runner's per-clip transcripts are what
+exposed it (Whisper had heard "Where is the train station?" for a clip
+labelled "Where can I check in?").
+
+| Clip | Spoken | Whisper | Outcome |
+|---|---|---|---|
+| aud_121 | Where is belt 9? | Various bads mine. | LOST: answer → abstain |
+| aud_122 | Baggage claim terminal 2 | Beggich claim terminal 2. | kept: `baggage_reclaim_t2` (terminal entity plus the semantic stage) |
+| aud_123 | when does boarding start | Wanda's boarding starts. | kept: redirect ("boarding" is a volatile phrase) |
+| aud_124 | gate c1 | Gate C1. | kept: `gates_pier_c` |
+| aud_125 | Where is the train station? | Where is the train station? | kept: `rail_station` |
+
+WER 0.42 on 19 reference words (6 substitutions, 2 deletions), typed 5 →
+transcript 4. Five clips are cases, not a rate; what they add is that the
+one loss is the same class as the synthetic losses: "belt 9" became
+"Various bads mine", the fourth "belt + digit" failure across four
+different voices (three synthetic, one human). "Gate C1", the short
+identifier that failed for the synthetic voices as "KHA 11" / "8-8-11" on
+A11, was transcribed exactly here. Two transcripts were wrong but
+harmless, and the reason is instructive: "Beggich claim terminal 2" still
+carries the terminal entity and enough of the alias for the semantic stage,
+and "Wanda's boarding starts" still carries the volatile phrase, so the
+cascade reached the same decision from a damaged transcript.
+
+Recording quality: peak amplitude 5–7 % of full scale, RMS −41 to −44 dBFS
+(just above the −45 dBFS gate), 1.0–1.4 s of leading silence. Re-running
+Whisper on the same clips with an 8× gain produced the same five
+transcripts, so level did not cause the "belt 9" loss. The −45 dBFS floor
+is close to what a laptop microphone at arm's length produces; a passenger
+holding a phone will be louder, but the floor should be checked against a
+few more human clips before it is called final.
 
 ## 6. Failure catalogue (every changed transcript on both splits)
 
@@ -328,19 +379,23 @@ The speech runner was also changed to warm Whisper up before timing
 transcription; the first run had reported a 25 s "maximum" that was the
 model load.
 
-## 8. Environment benchmark (this workspace, CPU; MacBook rows pending)
+## 8. Environment benchmark
 
 From `outputs/env_benchmark.csv` (loaders in `scripts/benchmark_env.py`,
-warm-up excluded from the runs, cold load reported separately):
+warm-up excluded from the runs, cold load reported separately). Workspace
+rows first, MacBook rows (arm64, `device_available` mps, `device_used` cpu)
+where measured:
 
 | Row | Cold load | Warm mean | RSS |
 |---|---|---|---|
-| clip (load) | 4.7 s | 0.35 s | 851 MB |
-| clip_encode (one image) | | 0.31 s | 1341 MB |
-| whisper (load) | 4.1 s | 0.16 s | 815 MB |
+| clip (load), workspace | 4.7 s | 0.35 s | 851 MB |
+| clip (load), MacBook | 2.8 s | 0.13 s | 517 MB |
+| clip_encode (one image), workspace | | 0.31 s | 1341 MB |
+| whisper (load), workspace | 4.1 s | 0.16 s | 815 MB |
+| whisper (load), MacBook | 2.8 s | 0.10 s | 493 MB |
 | whisper_transcribe, 2 s tone, before the token cap | 36.3 s (cold) | 31.1 s | 1122 MB |
 | whisper_transcribe, 2 s tone, after the cap | 9.1 s (cold) | 4.8 s | 1121 MB |
-| speech runner, real clips, warmed up | | median 1.46 s | |
+| speech runner, real clips, warmed up, workspace / MacBook | | median 1.46 s / 0.34 s | |
 
 The "before / after the cap" pair is the measurement behind
 `MAX_NEW_TOKENS = 64` (§9). Three models resident together (MiniLM, CLIP,
@@ -384,8 +439,10 @@ negatives), `test_scripts_compile.py` (every script compiles and imports).
 ## 11. Limitations to carry into the report
 
 - Synthetic voices are clean read speech; the accent spread is five voices
-  of one vendor, not passengers. The human recordings are the evidence that
-  matters and are not yet in.
+  of one vendor, not passengers. The human evidence is five clips from one
+  speaker; it agrees with the synthetic failure class but cannot give a
+  rate. More speakers (the consented recordings planned for the user study)
+  are needed before any WER for human speech is quoted.
 - WER is computed against the written query; a spoken "P1" has no single
   correct spelling, so a fraction of the WER is orthographic rather than
   acoustic. The identifier-token accuracy and the propagation breakdown are
@@ -410,22 +467,25 @@ should need to change for fusion beyond being called.
 
 # PROJECT STATE — CHECKPOINT 03.3
 
-- Repository: `github.com/yasmiiinay/nvh-airport-assistant`, branch `main`.
-  Workspace head after this checkpoint: `docs: checkpoint 03.3` on top of
-  `c519ee1`. Every commit under the project owner's identity, short messages.
+- Repository: `github.com/yasmiiinay/nvh-airport-assistant`, branch `main`,
+  pushed from the MacBook through `059e102` (human recordings) plus the
+  correction commit that follows. Every commit under the project owner's
+  identity, short messages.
 - Closed: 03.1 deterministic core; 03.2 text intelligence, semantic
   retrieval, response assembly (dev 35/43, held-out 24/36, frozen).
 - 03.3 IMPLEMENTED: `src/vision.py`, `src/speech.py`, runners
   `scripts/run_vision_eval.py` and `scripts/run_speech_eval.py`, dataset
   helpers `build_image_manifest.py`, `make_tts_audio.py`,
   `add_recordings.py`; 138 tests pass.
-- 03.3 EXECUTED (workspace CPU): speech on 120 synthetic clips. Dev WER
-  0.157 / 0.151 (L1 / L2), English-only 0.080 / 0.073, identifier accuracy
-  0.90, propagation 95 → 91 (gap 0.04), one wrong-confident answer
-  (aud_044). Held-out WER 0.092, propagation 20 → 17 (gap 0.15), three
-  identifier losses, all safe.
-- 03.3 NOT YET EVALUATED: human recordings (`--speakers human`); MacBook
-  re-run of the speech evaluation and the CLIP/Whisper benchmark rows.
+- 03.3 VERIFIED (workspace and MacBook, identical counts): speech on 120
+  synthetic clips. Dev WER 0.157 / 0.151 (L1 / L2), English-only 0.080 /
+  0.073, identifier accuracy 0.90, propagation 95 → 91 (gap 0.04), one
+  wrong-confident answer (aud_044). Held-out WER 0.092, propagation 20 → 17
+  (gap 0.15), three identifier losses, all safe. MacBook latency median
+  0.34 s per clip; Whisper-base and CLIP cold load 2.8 s each.
+- 03.3 EXECUTED: five human clips (spk_01), 4 of 5 outcomes kept, the loss
+  is the "belt + digit" class again; three spoken-only sentences declared in
+  `data/text/queries_spoken.csv`. Too few for a rate.
 - 03.3 BLOCKED BY DATA: vision evaluation and vision thresholds (image
   manifest empty). Data path is ready (§2).
 - Text pipeline: untouched in behaviour; two observed normaliser rules
@@ -433,7 +493,7 @@ should need to change for fusion beyond being called.
 - Carried to Chat 04: single-candidate threshold (text h019 + speech
   aud_044); h024 cross-terminal grounded negative; out-of-scope near
   `tau_low`; paraphrase recall; twin-record margins; anticipated-rule
-  removal decision after human recordings; optional Whisper-small
-  comparison; removal of the unused `write_artifacts` stubs in
-  `evaluation/`.
+  removal decision after more human recordings; optional Whisper-small
+  comparison; check of the −45 dBFS floor against more human clips;
+  removal of the unused `write_artifacts` stubs in `evaluation/`.
 - Not started, by design: fusion and routing, Gradio UI, Space deployment.

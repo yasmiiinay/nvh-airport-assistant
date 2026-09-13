@@ -86,13 +86,14 @@ def failure_type(reference_l2: str, hypothesis_l2: str, expected_ids: list[str],
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", choices=["dev", "heldout"], default="dev")
+    parser.add_argument("--split", choices=["dev", "heldout", "all"], default="dev")
     parser.add_argument("--speakers", default="tts", choices=["tts", "human", "all"],
                         help="synthetic voices (speaker ids starting with tts_), human recordings, or both")
     args = parser.parse_args()
     out_dir = OUT_ROOT / f"{args.split}_{args.speakers}"
     with open(AUDIO_DIR / "audio_manifest.csv", encoding="utf-8", newline="") as fh:
-        rows = [r for r in csv.DictReader(fh) if r["split"] == args.split and speaker_selected(r, args.speakers)]
+        rows = [r for r in csv.DictReader(fh)
+                if args.split in ("all", r["split"]) and speaker_selected(r, args.speakers)]
     if not rows:
         return blocked(out_dir, f"audio_manifest.csv has no {args.speakers} rows for split '{args.split}'. "
                        "Record clips or run scripts/make_tts_audio.py on the MacBook first.")
@@ -101,7 +102,8 @@ def main() -> int:
     gaz = load_gazetteers(SETTINGS.kb_path, SETTINGS.vocabulary_path)
     index = build_text_index(gaz, SETTINGS.intent_exemplars_path)
     thresholds = SETTINGS.thresholds()
-    queries = {q["query_id"]: q for q in load_queries(SETTINGS.queries_seed_path) + load_queries(SETTINGS.queries_heldout_path)}
+    queries = {q["query_id"]: q for path in (SETTINGS.queries_seed_path, SETTINGS.queries_heldout_path, SETTINGS.queries_spoken_path)
+               for q in load_queries(path)}
 
     per_clip, refs, hyps, ref_ids, latencies = [], [], [], [], []
     for row in rows:
