@@ -40,6 +40,10 @@ class Settings:
     tau_low: float | None = 0.25        # abstain threshold on cosine similarity
     margin_delta: float | None = 0.10   # clarify when top1 - top2 is below this
     tau_intent: float | None = 0.30     # below this nearest-exemplar score the intent is "none"
+    # vision bands: empirical, unset until a labelled development image split exists
+    vision_tau_high: float | None = None
+    vision_tau_low: float | None = None
+    vision_margin_delta: float | None = None
 
     # --- UI wording (frozen, v1.1 4.9) ---
     score_label: str = "match score"
@@ -48,9 +52,18 @@ class Settings:
     # --- audio quality gate bounds (initial values; validated in the pipeline phase) ---
     audio_min_seconds: float = 1.0
     audio_max_seconds: float = 60.0
+    audio_min_rms_dbfs: float = -45.0   # quieter than this is treated as silence
+    audio_sample_rate: int = 16000      # what Whisper expects
+    vision_prompts_path: Path = REPO_ROOT / "data" / "vision_prompts.json"
 
     def as_dict(self) -> dict:
         return {k: str(v) for k, v in asdict(self).items()}
+
+    def vision_thresholds(self) -> dict | None:
+        """None until the vision bands have been set on development images."""
+        values = {"vision_tau_high": self.vision_tau_high, "vision_tau_low": self.vision_tau_low,
+                  "vision_margin_delta": self.vision_margin_delta}
+        return None if any(v is None for v in values.values()) else values
 
     def thresholds(self) -> dict:
         values = {"tau_intent": self.tau_intent, "tau_high": self.tau_high,
