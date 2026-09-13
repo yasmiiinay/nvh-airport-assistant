@@ -97,11 +97,13 @@ def render(result: RetrievalResult, gaz) -> str:
     """Turn one cascade result into the text shown to the passenger."""
     lines: list[str] = []
     if is_action_request(result.normalized):
-        result.flags.append("action_request")
+        if "action_request" not in result.flags:
+            result.flags.append("action_request")
         lines.append("I cannot book, reserve, print or arrange anything; I can only give "
                      "information about the airport.")
     if asks_live_status(result.normalized):
-        result.flags.append("live_status_request")
+        if "live_status_request" not in result.flags:
+            result.flags.append("live_status_request")
         lines.append("I do not have live queue or waiting times; the terminal displays show them.")
 
     if result.decision == "redirect":
@@ -152,4 +154,123 @@ def render(result: RetrievalResult, gaz) -> str:
         lines.append("I cannot see the current time, so I cannot say whether it is open right now; "
                      "please compare the hours above with the time where you are.")
     lines.append(_provenance(record, result))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# multimodal outcomes (checkpoint 03.4)
+# ---------------------------------------------------------------------------
+
+def _category_label(category: str, gaz) -> str:
+    return f"{category.replace('_', ' ')} ({gaz.vocabulary['categories'][category]['description'].lower()})"
+
+
+def _names(record_ids: list[str], gaz) -> str:
+    return "; ".join(f"{gaz.records[rid]['name']} ({gaz.records[rid]['terminal']})" for rid in record_ids)
+
+
+def _image_provenance(outcome) -> str:
+    vision = outcome.vision
+    line = (f"Identified from the photo: match score {vision.category_ranking[0][1]:.2f}, "
+            f"{SCORE_NOTE}; band: {vision.band}.")
+    if vision.check.flags:
+        line += " The photo looks " + " and ".join(vision.check.flags) + "."
+    return line
+
+
+def _modality_notes(outcome, gaz) -> list[str]:
+    """Sentences that say what the other modalities contributed."""
+    lines = []
+    if outcome.speech is not None:
+        if outcome.speech.check.ok:
+            lines.append(f'I heard: "{outcome.speech.transcript_raw}".')
+        else:
+            lines.append(f"I could not use the voice clip ({outcome.speech.check.problem}); "
+                         "please re-record closer to the microphone or type your question.")
+    if outcome.vision is not None and outcome.route in ("text_leads", "voice_leads"):
+        if "image_agrees" in outcome.flags:
+            lines.append(f"The photo agrees: it looks like a {_category_label(outcome.image_category, gaz)} sign.")
+        elif "image_disagrees" in outcome.flags:
+            lines.append(f"Note: the photo looks like a {_category_label(outcome.image_category, gaz)} sign, "
+                         "which is not what your question refers to. I have answered the question; "
+                         "if you meant the sign, please ask about it on its own.")
+        elif "image_uncertain" in outcome.flags:
+            lines.append("I could not identify the sign in the photo with any confidence, so I answered from your words.")
+        elif "image_not_recognised" in outcome.flags:
+            lines.append("I could not recognise an airport sign in the photo, so I answered from your words.")
+    if outcome.error:
+        lines.append(f"One input could not be read ({outcome.error}).")
+    return lines
+
+
+def render_outcome(outcome, gaz) -> str:
+    """Text shown to the passenger for a routed multimodal outcome."""
+    lines: list[str] = []
+    if outcome.route == "none":
+        if outcome.speech is not None and not outcome.speech.check.ok:
+            lines.extend(_modality_notes(outcome, gaz))
+        elif outcome.error:
+            lines.append(f"I could not read that input ({outcome.error}).")
+            lines.append("Please type your question, or try a JPEG or PNG photo and a WAV or MP3 recording.")
+        else:
+            lines.append("Please type a question, add a photo of a sign, or record your question.")
+        return "\n".join(lines)
+    if outcome.route in ("text_leads", "voice_leads", "text_only", "voice_only") and outcome.decision != "conflict":
+        lines.append(render(outcome.text, gaz))
+        lines.extend(_modality_notes(outcome, gaz))
+        return "\n".join(lines)
+
+    if outcome.decision == "conflict":
+        detail = outcome.conflict_detail
+        text_part = (gaz.records[detail["text_record"]]["name"] if detail.get("text_record")
+                     else " or ".join(_category_label(c, gaz) for c in detail["text_categories"]))
+        lines.append(f"Your words point to {text_part}, but the photo looks like a "
+                     f"{_category_label(detail['image_category'], gaz)} sign. "
+                     "I will not guess between them: which one do you mean?")
+        lines.append("Options: " + _names(outcome.candidates, gaz) + ".")
+        lines.extend(_modality_notes(outcome, gaz))
+        lines.append(_provenance(None, outcome.text) if outcome.text else
+                     "Source: synthetic knowledge base for a fictional airport.")
+        return "\n".join(lines)
+
+    # image-led or image-only
+    if outcome.decision == "abstain":
+        lines.append("I could not recognise an airport sign in this photo.")
+        if outcome.vision is not None and outcome.vision.check.flags:
+            lines.append("The photo looks " + " and ".join(outcome.vision.check.flags) + "; a clearer, closer photo may help.")
+        lines.append("You can also type or say what you are looking for, or ask at an information desk.")
+        lines.extend(_modality_notes(outcome, gaz))
+        return "\n".join(lines)
+
+    category = outcome.image_category
+    if outcome.decision == "clarify":
+        if "image_uncertain" in outcome.flags:
+            options = ", ".join(_category_label(c, gaz) for c, _ in outcome.vision.category_ranking)
+            lines.append(f"I am not sure what this sign shows; it may be {options}. "
+                         "Could you say what you are looking for?")
+        elif "image_confirm" in outcome.flags:
+            lines.append(f"This looks like a {_category_label(category, gaz)} sign. "
+                         f"Is that what you are looking for? If so, the place is: {_names(outcome.candidates, gaz)}.")
+        else:
+            lines.append(f"This looks like a {_category_label(category, gaz)} sign. "
+                         f"There is more than one such place: {_names(outcome.candidates, gaz)}. "
+                         "Which terminal are you in?")
+        lines.extend(_modality_notes(outcome, gaz))
+        lines.append(_image_provenance(outcome))
+        return "\n".join(lines)
+
+    # image-led answer
+    record = gaz.records[outcome.matched_record_id]
+    if "deictic" in outcome.flags:
+        lines.append(f"This sign means: {_category_label(category, gaz)}.")
+    else:
+        lines.append(f"From the photo this looks like a {_category_label(category, gaz)} sign.")
+    if "text_not_understood" in outcome.flags:
+        lines.append("I did not understand the words, so the answer below comes from the photo.")
+    lines.extend(_record_text(record, gaz))
+    lines.extend(_modality_notes(outcome, gaz))
+    lines.append(_image_provenance(outcome))
+    lines.append(_provenance(record, outcome.text) if outcome.text else
+                 f"Source: synthetic knowledge base for a fictional airport (record {record['record_id']}, "
+                 f"last verified {record['last_verified']}).")
     return "\n".join(lines)
