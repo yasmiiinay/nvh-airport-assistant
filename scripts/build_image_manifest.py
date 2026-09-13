@@ -7,8 +7,12 @@ are fixed per source so they cannot be typed inconsistently; the wording
 follows Evidence Pack 02B2 section A1.
 
 Usage:
-    python scripts/build_image_manifest.py --source aiga_dot --folder data/images/raw/aiga --labels data/images/labels_aiga.csv
+    python scripts/build_image_manifest.py --source commons --folder data/images/raw/aiga --labels data/images/labels_aiga.csv
     python scripts/build_image_manifest.py --source own_photo --folder data/images/raw/own --labels data/images/labels_own.csv
+
+Out-of-scope rows carry a note starting with `generic:` (no airport meaning)
+or `airport_adjacent:` (an airport symbol outside the vocabulary), which the
+vision evaluation reports separately.
 Files are copied unmodified to data/images/files/<image_id>.<ext>.
 """
 from __future__ import annotations
@@ -30,6 +34,15 @@ SOURCES = {
         "attribution": "AIGA and the US Department of Transportation symbol signs, made available free of charge and described by AIGA as copyright-free",
         "source_type": "clean_icon",
         "default_stratum": "clean",
+        "modified": "no",
+    },
+    "commons": {
+        "licence": "public domain / CC0 (AIGA/DOT symbol signs, per-file licence in data/images/provenance_commons.csv)",
+        "licence_url": "https://commons.wikimedia.org/wiki/Category:AIGA_symbol_signs",
+        "attribution": "AIGA and the US Department of Transportation symbol signs, files from Wikimedia Commons rendered server-side as 512 px PNG",
+        "source_type": "clean_icon",
+        "default_stratum": "clean",
+        "modified": "yes",
     },
     "own_photo": {
         "licence": "own work",
@@ -37,6 +50,7 @@ SOURCES = {
         "attribution": "photograph by the project author",
         "source_type": "photo_signage",
         "default_stratum": "real_good_light",
+        "modified": "yes",   # single symbols are cropped out of the photographs
     },
 }
 IMAGES_DIR = REPO_ROOT / "data" / "images"
@@ -83,7 +97,7 @@ def main() -> int:
             added.append({
                 "image_id": image_id, "category": label["category"], "source": args.source,
                 "licence": preset["licence"], "licence_url": preset["licence_url"],
-                "attribution": preset["attribution"], "modified": "no",
+                "attribution": preset["attribution"], "modified": preset["modified"],
                 "source_type": preset["source_type"],
                 "quality_stratum": label.get("quality_stratum") or preset["default_stratum"],
                 "split": label.get("split") or "dev", "expected_label": label["category"],

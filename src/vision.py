@@ -61,7 +61,20 @@ def load_image(path: str | Path) -> Image.Image:
         raise ValueError(f"image too large: {image.width}x{image.height}")
     if min(image.width, image.height) < MIN_SIDE:
         raise ValueError(f"image too small: {image.width}x{image.height}")
-    return ImageOps.exif_transpose(image).convert("RGB")
+    return flatten_on_white(ImageOps.exif_transpose(image))
+
+
+def flatten_on_white(image: Image.Image) -> Image.Image:
+    """RGB on a white background. Pictogram files are usually black shapes on
+    a transparent background; a plain RGB conversion drops the alpha channel
+    and leaves an all-black image, which every such file then shares (found
+    on the first run: dozens of different symbols produced one identical
+    embedding)."""
+    if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+        rgba = image.convert("RGBA")
+        background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        return Image.alpha_composite(background, rgba).convert("RGB")
+    return image.convert("RGB")
 
 
 def check_image(image: Image.Image) -> ImageCheck:
@@ -132,6 +145,7 @@ class VisionIndex:
     anchor_vecs: np.ndarray
     record_ids: list[str]
     record_vecs: np.ndarray
+    record_categories: list[str] = field(default_factory=list)   # parallel to record_ids
 
 
 def load_prompts(path: str | Path) -> dict:
@@ -156,7 +170,8 @@ def build_vision_index(gaz, prompts: dict, embed=embed_texts) -> VisionIndex:
     visual = [r for r in gaz.kb["records"] if gaz.vocabulary["categories"][r["category"]]["visual_class"]]
     record_ids = [r["record_id"] for r in visual]
     return VisionIndex(categories, category_vecs, anchors, embed(anchors),
-                       record_ids, embed([r["retrieval_text"] for r in visual]))
+                       record_ids, embed([r["retrieval_text"] for r in visual]),
+                       [r["category"] for r in visual])
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +205,7 @@ class VisionResult:
     category_margin: float
     best_anchor: tuple[str, float]
     out_of_scope: bool
-    record_ranking: list[tuple[str, float]]       # top 3 KB records
+    record_ranking: list[tuple[str, float]]       # KB records of the top category, best first
     record_margin: float
     band: str | None                              # set only when thresholds are known
 
@@ -209,22 +224,36 @@ class VisionResult:
 def analyse_vector(path: str, check: ImageCheck, image_vec: np.ndarray, index: VisionIndex,
                    thresholds: dict | None = None) -> VisionResult:
     """Everything after the encoder; split out so the logic is testable with
-    synthetic vectors."""
+    synthetic vectors.
+
+    The band is decided on the category ranking, because a sign identifies a
+    kind of place and not which terminal's instance of it: the KB holds one
+    record per terminal for most categories, so a record ranking from an
+    image alone has near-zero margins by construction (measured on the first
+    labelled run) and would send every image to the uncertain band. The
+    records of the top category are still returned, ranked, as the candidate
+    list that text or a follow-up question can narrow later."""
     categories = rank(image_vec, index.category_vecs, index.categories)
     anchors = rank(image_vec, index.anchor_vecs, index.anchors)
-    records = rank(image_vec, index.record_vecs, index.record_ids)
     oos = out_of_scope(categories, anchors)
+    top_category = categories[0][0] if categories else None
+    all_records = rank(image_vec, index.record_vecs, index.record_ids)
+    if index.record_categories:
+        category_of = dict(zip(index.record_ids, index.record_categories))
+        records = [(rid, s) for rid, s in all_records if category_of[rid] == top_category]
+    else:
+        records = all_records
     band = None
     if thresholds is not None:
         if oos:
             band = "no reliable match"
         else:
-            decision, _, _ = decide(records, thresholds["vision_tau_high"], thresholds["vision_tau_low"],
+            decision, _, _ = decide(categories, thresholds["vision_tau_high"], thresholds["vision_tau_low"],
                                     thresholds["vision_margin_delta"])
             band = BAND_FOR_DECISION[decision]
     return VisionResult(path=path, check=check, category_ranking=categories[:3],
                         category_margin=top_margin(categories), best_anchor=anchors[0] if anchors else ("", 0.0),
-                        out_of_scope=oos, record_ranking=records[:3], record_margin=top_margin(records),
+                        out_of_scope=oos, record_ranking=records, record_margin=top_margin(records) if records else 0.0,
                         band=band)
 
 

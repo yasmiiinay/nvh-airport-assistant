@@ -50,6 +50,19 @@ def test_invalid_images_raise_plain_errors(tmp_path):
         load_image(tiny)
 
 
+def test_transparent_pictograms_keep_their_shape(tmp_path):
+    """Two different black symbols on transparent backgrounds must load as
+    two different images on white, not as the same all-black image."""
+    for name, box in (("square.png", (40, 40, 160, 160)), ("bar.png", (20, 90, 180, 110))):
+        image = Image.new("LA", (200, 200), (0, 0))
+        image.paste((0, 255), box)
+        image.save(tmp_path / name)
+    square = np.asarray(load_image(tmp_path / "square.png"))
+    bar = np.asarray(load_image(tmp_path / "bar.png"))
+    assert 120 < square.mean() < 255 and 200 < bar.mean() < 255   # white background survives, symbol survives
+    assert not np.array_equal(square, bar)
+
+
 def test_quality_flags():
     dark_flat = Image.new("RGB", (200, 200), (10, 10, 10))
     assert set(check_image(dark_flat).flags) == {"blurry", "dark"}
@@ -77,14 +90,16 @@ def synthetic_index():
         categories=["gate", "baggage"], category_vecs=np.stack([unit([1, 0, 0]), unit([0, 1, 0])]),
         anchors=["a photograph of a person"], anchor_vecs=np.stack([unit([0, 0, 1])]),
         record_ids=["gates_pier_a", "gates_pier_b", "baggage_reclaim_t1"],
-        record_vecs=np.stack([unit([1, 0.05, 0]), unit([1, 0, 0.05]), unit([0, 1, 0])]))
+        record_vecs=np.stack([unit([1, 0.05, 0]), unit([1, 0, 0.05]), unit([0, 1, 0])]),
+        record_categories=["gate", "gate", "baggage"])
 
 
 def test_structured_result_without_thresholds():
     check = check_image(Image.new("RGB", (100, 100), (128, 128, 128)))
     r = analyse_vector("x.png", check, unit([1, 0.2, 0]), synthetic_index())
     assert r.top_category == "gate" and r.category_ranking[0][0] == "gate"
-    assert len(r.category_ranking) == 2 and len(r.record_ranking) == 3
+    assert len(r.category_ranking) == 2
+    assert [rid for rid, _ in r.record_ranking] == ["gates_pier_a", "gates_pier_b"]   # only the top category's records
     assert r.top_record == "gates_pier_a" and r.record_margin >= 0
     assert r.band is None and not r.out_of_scope
     assert set(r.as_dict()) >= {"category_ranking", "record_ranking", "best_anchor", "out_of_scope", "band"}
@@ -94,7 +109,9 @@ def test_bands_and_out_of_scope_result():
     thresholds = {"vision_tau_high": 0.5, "vision_tau_low": 0.2, "vision_margin_delta": 0.05}
     check = check_image(Image.new("RGB", (100, 100), (128, 128, 128)))
     strong = analyse_vector("x.png", check, unit([1, 0, 0.3]), synthetic_index(), thresholds)
-    assert strong.band == "strong match" or strong.band == "uncertain"   # depends on the twin-record margin
+    assert strong.band == "strong match"        # decided on the category ranking, not the twin records
+    close = analyse_vector("x.png", check, unit([1, 0.98, 0]), synthetic_index(), thresholds)
+    assert close.band == "uncertain" and not close.out_of_scope
     oos = analyse_vector("x.png", check, unit([0, 0.1, 1]), synthetic_index(), thresholds)
     assert oos.out_of_scope and oos.band == "no reliable match"
     assert oos.top_category is None and oos.top_record is None
@@ -131,7 +148,7 @@ def test_clip_embeddings_are_unit_length(clip_index, photo):
 
 def test_random_noise_image_is_out_of_scope_or_low(clip_index, photo):
     r = vision.analyse_image(photo, clip_index)
-    assert len(r.category_ranking) == 3 and len(r.record_ranking) == 3
+    assert len(r.category_ranking) == 3 and len(r.record_ranking) >= 1
     # random noise should not look like a strong airport sign; either an anchor
     # wins or the best category similarity is modest
     assert r.out_of_scope or r.category_ranking[0][1] < 0.35

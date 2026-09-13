@@ -41,10 +41,12 @@ class Settings:
     tau_low: float | None = 0.25        # abstain threshold on cosine similarity
     margin_delta: float | None = 0.10   # clarify when top1 - top2 is below this
     tau_intent: float | None = 0.30     # below this nearest-exemplar score the intent is "none"
-    # vision bands: empirical, unset until a labelled development image split exists
-    vision_tau_high: float | None = None
-    vision_tau_low: float | None = None
-    vision_margin_delta: float | None = None
+    # vision bands: set on the 19 in-scope + 18 out-of-scope dev pictograms (checkpoint
+    # 03.3). CLIP category scores sit in a narrow 0.24-0.37 band, so the margin carries
+    # most of the decision; the scores are far lower than the text cosine scale.
+    vision_tau_high: float | None = 0.30
+    vision_tau_low: float | None = 0.24
+    vision_margin_delta: float | None = 0.015
 
     # --- UI wording (frozen, v1.1 4.9) ---
     score_label: str = "match score"

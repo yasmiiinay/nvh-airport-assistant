@@ -59,8 +59,8 @@ def main() -> int:
     index = build_vision_index(gaz, load_prompts(SETTINGS.vision_prompts_path))
     thresholds = SETTINGS.vision_thresholds()
 
-    per_image, gold, ranked_cats, scores, correct_flags = [], [], [], [], []
-    oos_flags_with, oos_flags_without = [], []
+    per_image, gold, ranked_cats, scores, correct_flags, strata = [], [], [], [], [], []
+    oos_flags_with, oos_flags_without, oos_kind = [], [], []
     for row in rows:
         try:
             image = load_image(IMAGES_DIR / row["file"])
@@ -78,14 +78,19 @@ def main() -> int:
         ranked_cats.append(["out_of_scope"] if r.out_of_scope else [c for c, _ in r.category_ranking])
         scores.append(r.category_ranking[0][1])
         correct_flags.append(is_correct)
-        (oos_flags_with if row["expected_label"] == "out_of_scope" else oos_flags_without).append(r.out_of_scope)
+        strata.append(row["quality_stratum"])
+        if row["expected_label"] == "out_of_scope":
+            oos_flags_with.append(r.out_of_scope)
+            oos_kind.append(row["notes"].split(":")[0] if ":" in row["notes"] else "unspecified")
+        else:
+            oos_flags_without.append(r.out_of_scope)
         per_image.append({
             "image_id": row["image_id"], "file": row["file"], "expected": row["expected_label"],
             "stratum": row["quality_stratum"], "predicted": predicted, "correct": is_correct,
             "top3_categories": "|".join(f"{c}:{s}" for c, s in r.category_ranking),
             "category_margin": r.category_margin, "best_anchor": f"{r.best_anchor[0]}:{r.best_anchor[1]}",
             "out_of_scope": r.out_of_scope, "out_of_scope_without_anchors": r_no_anchor.out_of_scope,
-            "top3_records": "|".join(f"{c}:{s}" for c, s in r.record_ranking),
+            "records_in_top_category": "|".join(f"{c}:{s}" for c, s in r.record_ranking),
             "record_margin": r.record_margin, "band": r.band or "",
             "blur_score": round(r.check.blur_score, 1), "brightness": round(r.check.brightness, 1),
             "flags": "|".join(r.check.flags),
@@ -101,7 +106,7 @@ def main() -> int:
     by_category, by_stratum = {}, {}
     for i in in_scope:
         by_category.setdefault(gold[i], []).append(correct_flags[i])
-        by_stratum.setdefault(rows[i]["quality_stratum"], []).append(correct_flags[i])
+        by_stratum.setdefault(strata[i], []).append(correct_flags[i])
     margins = [r["category_margin"] for r in per_image if "category_margin" in r]
     summary = {
         "split": args.split, "n_images": len(rows), "n_in_scope": len(in_scope),
@@ -114,6 +119,10 @@ def main() -> int:
         "margin": {"median_correct": statistics.median([m for m, c in zip(margins, correct_flags) if c] or [0]),
                    "median_incorrect": statistics.median([m for m, c in zip(margins, correct_flags) if not c] or [0])},
         "out_of_scope_detection": oos_anchor_abstention(oos_flags_without, oos_flags_with),
+        "out_of_scope_detection_by_kind": {
+            k: {"n": sum(1 for kk in oos_kind if kk == k),
+                "detected": sum(1 for kk, f in zip(oos_kind, oos_flags_with) if kk == k and f)}
+            for k in sorted(set(oos_kind))},
         "anchor_ablation_without_anchors": {
             "abstain_rate_out_of_scope": 0.0, "false_abstain_rate_in_scope": 0.0,
             "note": "without anchors nothing can be marked out of scope by construction; the band floor is the only remaining guard"},
@@ -127,7 +136,7 @@ def main() -> int:
         writer.writerow(["gold", "predicted", "count"])
         for (g, p), n in sorted(pairs.items()):
             writer.writerow([g, p, n])
-    print(json.dumps({k: summary[k] for k in ("n_images", "top1", "top3", "by_stratum", "out_of_scope_detection")}, indent=1))
+    print(json.dumps({k: summary[k] for k in ("n_images", "top1", "top3", "by_category", "by_stratum", "out_of_scope_detection", "out_of_scope_detection_by_kind", "bands")}, indent=1))
     print(f"written to {OUT_DIR}")
     return 0
 
