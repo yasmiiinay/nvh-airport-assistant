@@ -89,6 +89,11 @@ def evidence_markdown(outcome: Outcome, gaz) -> str:
     if speech is not None:
         lines.append(f"**Audio:** {speech.check.seconds:.1f} s, {speech.check.rms_dbfs:.0f} dBFS, "
                      f"{'accepted' if speech.check.ok else 'rejected: ' + str(speech.check.problem)}")
+    if outcome.score is not None:
+        lines.append(f"**Match score:** {outcome.score:.2f}. This is a cosine similarity between your input and "
+                     "the record or category text. Values for this system sit between about 0.25 and 0.60, "
+                     "so 0.37 can be a strong match; the band comes from the score together with the gap "
+                     "to the runner-up, not from the number alone.")
     if outcome.matched_record_id:
         lines.append(f"**Matched record:** `{outcome.matched_record_id}`")
     if outcome.candidates:
@@ -108,10 +113,7 @@ def band_text(outcome: Outcome) -> str:
         return "Referred to the official source"
     if outcome.decision == "conflict":
         return "Inputs disagree, please choose"
-    label = BAND_LABELS.get(outcome.band or "", "Not scored")
-    if outcome.score is not None:
-        label += f" (match score {outcome.score:.2f})"
-    return label
+    return BAND_LABELS.get(outcome.band or "", "Not scored")
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +218,8 @@ def build_ui() -> gr.Blocks:
                 response = gr.Markdown(label="Answer", value="", elem_id="response")
                 with gr.Row():
                     band = gr.Textbox(label="Match band", value="Not scored", interactive=False, lines=2,
+                                      info="How well your input matched: strong, uncertain, or no reliable match. "
+                                           "It is not a probability. The number behind it is under Evidence and details.",
                                       elem_classes=["status-box"], elem_id="band")
                     source = gr.Textbox(label="Evidence used", value="", interactive=False, elem_id="source")
                 transcript = gr.Textbox(label="What I heard (voice input)", value="", interactive=False,
@@ -228,9 +232,9 @@ def build_ui() -> gr.Blocks:
                     note = gr.Textbox(label="Your note (optional)", lines=2)
                     request = gr.Button("Record assistance request")
                     ticket_out = gr.Markdown(value="")
-        gr.Markdown("Match score is a similarity measure between your input and the matched record; "
-                    "it is not a probability that the answer is correct. Bands: strong match, "
-                    "uncertain (please confirm), no reliable match.")
+        gr.Markdown("The match band says how well your input matched the airport information: strong match, "
+                    "uncertain (please confirm), or no reliable match. It is based on similarity, not on a "
+                    "probability that the answer is correct; the underlying numbers are shown under Evidence and details.")
 
         outputs = [response, band, source, transcript, evidence, session]
         ask.click(answer, inputs=[text_in, image_in, audio_in, session], outputs=outputs)

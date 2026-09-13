@@ -8,6 +8,9 @@ end on an authored scenario set. No modality pipeline was retrained or
 re-tuned; the frozen text, vision and speech results were re-run after the
 integration and are unchanged (§2). Status labels as before: IMPLEMENTED,
 EXECUTED (this workspace), VERIFIED (also on the MacBook), NOT YET EVALUATED.
+Both scenario splits were re-run on the MacBook and every route, decision,
+record and verdict matched this workspace line for line; the checkpoint is
+VERIFIED.
 
 ## 1. Files changed
 
@@ -27,7 +30,7 @@ EXECUTED (this workspace), VERIFIED (also on the MacBook), NOT YET EVALUATED.
 
 ## 2. Tests and regression checks
 
-`python -m pytest tests` — **166 passed** (this workspace, all models present).
+`python -m pytest tests` — **167 passed** (this workspace and the MacBook, all models present).
 `scripts/audit_foundation.py` — ALL CHECKS PASS.
 
 Regression after integration, byte-for-byte against the frozen outputs:
@@ -229,6 +232,19 @@ it. This is the same lesson as 03.3: the evaluation runner and the
 interface must load the image the same way, and only the browser run
 proved they did not.
 
+**Score presentation, changed after the MacBook session.** The band box
+first showed "Strong match (match score 0.37)", and the project owner
+read 0.37 as a weak result, which is how any passenger would read a
+number under 0.5. The raw cosine is not on that scale: correct pictogram
+matches sit at 0.28 to 0.37 and text answers at 0.5 to 0.6, and the band
+comes from the score together with the margin. The answer and the band
+box now carry the band only ("Strong match", "Matched by similarity:
+strong match"), the band box has a one-line note under its label, and the
+number moved to the evidence panel with a sentence saying what range the
+system produces and that the band is not read off the number alone. The
+Architecture Freeze wording (match score plus band, no percentages, no
+probability) is kept; what changed is where the number appears.
+
 Screenshots (this workspace, headless Chromium, external requests blocked
 so the Google font falls back to the system sans-serif):
 `docs/checkpoints/images/ui_03_4_start.png`, `ui_03_4_text_answer.png`,
@@ -297,9 +313,8 @@ more.
 
 Workspace CPU, models warm, per scenario: text only median 9 ms; photo
 only 93 ms (max 132 ms); text + photo 87 ms; voice only 1.2 s; voice +
-photo 1.5 s (max 2.0 s). The MacBook figures from 03.3 (Whisper about a
-quarter of the workspace time) make the voice turn well under a second
-there. Cold start: MiniLM, CLIP and Whisper together about 20 s here and
+photo 1.5 s (max 2.0 s). MacBook, same scenarios: median 51 ms on dev and
+40 ms on held-out, slowest turn (voice + photo) 0.49 s. Cold start: MiniLM, CLIP and Whisper together about 20 s here and
 about 8 s on the MacBook, taken on the first question; roughly 2 GB RSS
 with all three resident. The interface itself adds nothing measurable.
 
@@ -330,8 +345,8 @@ the smoke-test Space from 02C shows the build path works.
   owner for the final numbers; the multimodal held-out set has now been
   run once and is no longer blind to the developer.
 - Removal of the remaining `write_artifacts` stubs in `evaluation/`.
-- MacBook re-run of `run_multimodal_eval.py` (dev, heldout,
-  `--confirm-image-only`); the microphone check in a browser is done.
+- MacBook re-run of `--confirm-image-only` (dev and held-out are done and
+  identical; the microphone check in a browser is done).
 
 # PROJECT STATE — END OF CHAT 03
 
@@ -341,8 +356,7 @@ the smoke-test Space from 02C shows the build path works.
   response assembly (dev 35/43, held-out 24/36, frozen); 03.3 vision and
   speech (vision dev 0.947 / held-out 0.857 top-1; speech dev WER 0.157,
   propagation 95 → 91, held-out 20 → 17, human 4/5; all VERIFIED on the
-  MacBook); 03.4 multimodal integration and interface (this note; EXECUTED
-  here, MacBook run pending).
+  MacBook); 03.4 multimodal integration and interface (this note; VERIFIED on the MacBook, line for line).
 - Multimodal, 68 scenarios: routing 0.985, correct 0.735, wrong-confident
   0.044, safe when no answer expected 0.925, conflict P 0.82 / R 0.90,
   modality contribution positive on every combined type, confirm variant

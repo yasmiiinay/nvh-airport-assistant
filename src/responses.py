@@ -27,6 +27,7 @@ ACTION_PATTERN = re.compile(
 LIVE_STATUS_PATTERN = re.compile(r"\b(queue|queues|waiting time|wait time|how long|busy|crowded)\b")
 
 SCORE_NOTE = "a similarity measure, not a probability that the answer is correct"
+BAND_FOR_SCORE = {"answer": "strong match", "clarify": "uncertain", "abstain": "no reliable match"}
 
 
 def is_action_request(normalized_query: str) -> bool:
@@ -87,7 +88,7 @@ def _provenance(record: dict | None, result: RetrievalResult) -> str:
     if record:
         source += f" (record {record['record_id']}, last verified {record['last_verified']})"
     if result.match_score is not None:
-        source += f". Match score {result.match_score:.2f}, {SCORE_NOTE}"
+        source += f". Matched by similarity: {BAND_FOR_SCORE.get(result.decision, result.decision)}"
     elif result.stage in ("exact_identifier", "alias_lookup"):
         source += f". Matched by {result.stage.replace('_', ' ')}"
     return source + "."
@@ -171,8 +172,7 @@ def _names(record_ids: list[str], gaz) -> str:
 
 def _image_provenance(outcome) -> str:
     vision = outcome.vision
-    line = (f"Identified from the photo: match score {vision.category_ranking[0][1]:.2f}, "
-            f"{SCORE_NOTE}; band: {vision.band}.")
+    line = f"Identified from the photo: {vision.band}."
     if vision.check.flags:
         line += " The photo looks " + " and ".join(vision.check.flags) + "."
     return line

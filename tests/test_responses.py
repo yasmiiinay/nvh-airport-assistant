@@ -112,11 +112,13 @@ def test_booking_request_states_it_cannot_act(gaz, index):
     assert "booked" not in text.lower() and no_forbidden_claims(text)
 
 
-def test_semantic_answer_shows_match_score_with_disclaimer(gaz, index):
+def test_semantic_answer_names_the_band_not_the_number(gaz, index):
+    """The raw cosine reads like a low percentage to a passenger; the answer
+    carries the band and the evidence panel carries the number."""
     r = retrieval.resolve("taxi?", gaz, index, SETTINGS.thresholds())
     assert r.decision == "answer"
     text = render(r, gaz)
-    assert f"Match score {r.match_score:.2f}" in text and "not a probability" in text
+    assert "Matched by similarity: strong match" in text and f"{r.match_score:.2f}" not in text
 
 
 if __name__ == "__main__":
