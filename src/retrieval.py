@@ -1,9 +1,13 @@
-"""Deterministic stages of the retrieval cascade (Architecture Freeze v1.1 4.4).
+"""The retrieval cascade (Architecture Freeze v1.1 4.4).
 
-Frozen order:  normalise -> exact identifier -> alias/gazetteer -> [intent ->
-category filter -> semantic similarity -> decision].  This module implements
-everything before the first bracket, plus two scripted branches that must run
-before any retrieval at all:
+Frozen order:  normalise -> exact identifier -> alias/gazetteer -> intent ->
+category filter -> semantic similarity -> decision.  `resolve_deterministic`
+covers everything up to the gazetteer plus two scripted branches that must
+run before any retrieval at all; `resolve_semantic` takes over only when the
+deterministic stages hand a query on unresolved. Deterministic matches are
+therefore always preferred to similarity, by construction.
+
+Scripted branches in the deterministic half:
 
   * volatile redirect: a flight reference or a volatile phrase means any
     KB answer could be stale, so the query is redirected to the official
@@ -30,15 +34,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 
+import numpy as np
+
 from src.entities import Extraction, Gazetteers, extract
+from src.intent import NO_INTENT, load_exemplars, predict_intent
+from src.text_encoder import encode
 
 STAGE_EXACT = "exact_identifier"
 STAGE_ALIAS = "alias_lookup"
-STAGE_NONE = "no_retrieval"   # scripted branches: redirect, deictic clarify
+STAGE_NONE = "no_retrieval"          # scripted branches: redirect, deictic clarify
+STAGE_CATEGORY = "category_filter_semantic"
+STAGE_FULL_KB = "semantic_full_kb"
 
 
 @dataclass
-class DeterministicResult:
+class RetrievalResult:
     query: str
     normalized: str
     entities: dict[str, str]
@@ -50,13 +60,24 @@ class DeterministicResult:
     reason: str = ""
     flags: list[str] = field(default_factory=list)
     handoff: dict = field(default_factory=dict)   # what the semantic stage receives
+    # filled by the semantic stage only
+    intent: str | None = None
+    intent_score: float | None = None
+    intent_exemplar: str | None = None
+    match_score: float | None = None  # cosine similarity of the top record
+    margin: float | None = None       # top1 - top2 cosine
+    ranked: list[tuple[str, float]] = field(default_factory=list)   # top records with scores
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def _decide(result: DeterministicResult, stage: str, decision: str, reason: str,
-            record_id: str | None = None, candidates: list[str] | None = None) -> DeterministicResult:
+# kept so the 03.1 code and tests read naturally
+DeterministicResult = RetrievalResult
+
+
+def _decide(result: RetrievalResult, stage: str, decision: str, reason: str,
+            record_id: str | None = None, candidates: list[str] | None = None) -> RetrievalResult:
     result.resolved = True
     result.stage, result.decision, result.reason = stage, decision, reason
     result.matched_record_id = record_id
@@ -71,15 +92,15 @@ def _identifier_range_text(gaz: Gazetteers, prefix: str) -> str:
     return "; ".join(f"{shown}{lo} to {shown}{hi}" for _, lo, hi, shown in owners)
 
 
-def resolve_deterministic(query: str, gaz: Gazetteers) -> DeterministicResult:
+def resolve_deterministic(query: str, gaz: Gazetteers) -> RetrievalResult:
     """Run the deterministic stages on one text query.
 
     Returns a resolved result (stage + decision set) or an unresolved one whose
     `handoff` carries candidates and category hints for the semantic stage.
     """
     ex: Extraction = extract(query, gaz)
-    result = DeterministicResult(query=ex.raw, normalized=ex.normalized,
-                                 entities=ex.as_json_dict(), resolved=False)
+    result = RetrievalResult(query=ex.raw, normalized=ex.normalized,
+                             entities=ex.as_json_dict(), resolved=False)
     if ex.of_type("time"):
         # extracted but never reasoned about: the response layer must not
         # claim open/closed or compute waits (MVP has no clock)
@@ -183,3 +204,124 @@ def resolve_deterministic(query: str, gaz: Gazetteers) -> DeterministicResult:
     if not result.reason:
         result.reason = "no identifier, alias or decisive category cue"
     return result
+
+
+# ---------------------------------------------------------------------------
+# Semantic stages
+# ---------------------------------------------------------------------------
+
+@dataclass
+class TextIndex:
+    """Exemplar and KB vectors, computed once per process."""
+    exemplars: list[dict]
+    exemplar_vecs: np.ndarray
+    record_ids: list[str]
+    record_vecs: np.ndarray
+
+
+def build_text_index(gaz: Gazetteers, exemplars_path) -> TextIndex:
+    exemplars = load_exemplars(exemplars_path)
+    record_ids = [r["record_id"] for r in gaz.kb["records"]]
+    record_texts = [gaz.records[rid]["retrieval_text"] for rid in record_ids]
+    return TextIndex(exemplars, encode([e["exemplar"] for e in exemplars]),
+                     record_ids, encode(record_texts))
+
+
+def rank_records(query_vec: np.ndarray, index: TextIndex, allowed: list[str]) -> list[tuple[str, float]]:
+    """Cosine similarity of the query against the allowed records, best first.
+    A plain matrix product: the vectors are already unit length."""
+    positions = [index.record_ids.index(rid) for rid in allowed]
+    sims = index.record_vecs[positions] @ query_vec
+    order = np.argsort(-sims)
+    return [(allowed[i], round(float(sims[i]), 4)) for i in order]
+
+
+def candidate_records(intent: str, handoff: dict, gaz: Gazetteers, filter_mode: str) -> tuple[list[str], str]:
+    """Which records the similarity search may consider, and the stage name.
+
+    filter_mode "intent" is the frozen design: the intent's compatible
+    categories. "cues" uses the lexical category hints from the deterministic
+    stage instead when present (the evaluated variant). "none" searches the
+    whole KB. A terminal mentioned in the query narrows the set when that
+    leaves anything. An empty set falls back to the whole KB."""
+    categories: list[str] = []
+    if filter_mode == "intent" and intent != NO_INTENT:
+        categories = gaz.vocabulary["intents"][intent]["compatible_categories"]
+    elif filter_mode == "cues":
+        categories = handoff.get("category_hints") or (
+            gaz.vocabulary["intents"][intent]["compatible_categories"] if intent != NO_INTENT else [])
+    allowed = [rid for rid in gaz.records if gaz.records[rid]["category"] in categories]
+    terminals = handoff.get("terminal") or []
+    if terminals:
+        in_terminal = [rid for rid in allowed if gaz.records[rid]["terminal"] in terminals]
+        allowed = in_terminal or allowed
+    if allowed:
+        return allowed, STAGE_CATEGORY
+    return list(gaz.records), STAGE_FULL_KB
+
+
+def decide(ranked: list[tuple[str, float]], tau_high: float, tau_low: float,
+           margin_delta: float) -> tuple[str, float, float]:
+    """answer / clarify / abstain from the top score and the top1-top2 margin."""
+    top_score = ranked[0][1]
+    margin = top_score - ranked[1][1] if len(ranked) > 1 else top_score
+    if top_score < tau_low:
+        return "abstain", top_score, margin
+    if top_score >= tau_high and margin >= margin_delta:
+        return "answer", top_score, margin
+    return "clarify", top_score, margin
+
+
+def resolve_semantic(result: RetrievalResult, gaz: Gazetteers, index: TextIndex, thresholds: dict,
+                     filter_mode: str = "intent", query_vec: np.ndarray | None = None) -> RetrievalResult:
+    """Semantic stages for a query the deterministic stages left unresolved.
+
+    `thresholds` holds tau_intent, tau_high, tau_low and margin_delta (see
+    Settings.thresholds()); they are passed explicitly so the evaluation can
+    sweep them without touching the global settings."""
+    if result.resolved:
+        return result
+    if query_vec is None:
+        query_vec = encode([result.normalized])[0]
+    prediction = predict_intent(query_vec, index.exemplar_vecs, index.exemplars, thresholds["tau_intent"])
+    result.intent = prediction["intent"]
+    result.intent_score = prediction["score"]
+    result.intent_exemplar = prediction["exemplar"]
+
+    if result.intent != NO_INTENT and gaz.vocabulary["intents"][result.intent]["volatility"] == "volatile":
+        target = next(rid for rid, r in gaz.records.items() if r.get("volatility") == "high")
+        result.flags.append("volatile")
+        return _decide(result, STAGE_NONE, "redirect",
+                       f"intent {result.intent} ({prediction['score']}): live flight data is never answered from the KB",
+                       target)
+
+    allowed, stage = candidate_records(result.intent, result.handoff, gaz, filter_mode)
+    ranked = rank_records(query_vec, index, allowed)
+    decision, score, margin = decide(ranked, thresholds["tau_high"], thresholds["tau_low"],
+                                     thresholds["margin_delta"])
+    result.ranked = ranked[:3]
+    result.match_score, result.margin = round(score, 4), round(margin, 4)
+    top_id = ranked[0][0]
+    if decision == "clarify" and result.intent != NO_INTENT and \
+            gaz.vocabulary["intents"][result.intent]["response_type"] == "assist":
+        # assistance requests are answered with the nearest designated point
+        # and its contact instead of a follow-up question (vocabulary note)
+        result.flags.append("assist_policy")
+        decision = "answer"
+    if decision == "answer":
+        return _decide(result, stage, "answer", f"top record {top_id} at {score:.2f}, margin {margin:.2f}", top_id)
+    if decision == "clarify":
+        return _decide(result, stage, "clarify",
+                       f"score {score:.2f} or margin {margin:.2f} below threshold; offering top candidates",
+                       None, [rid for rid, _ in ranked[:3]])
+    return _decide(result, stage, "abstain", f"best similarity {score:.2f} below abstain threshold", None,
+                   [rid for rid, _ in ranked[:3]])
+
+
+def resolve(query: str, gaz: Gazetteers, index: TextIndex, thresholds: dict,
+            filter_mode: str = "intent") -> RetrievalResult:
+    """Full text cascade: deterministic first, semantic only if still unresolved."""
+    result = resolve_deterministic(query, gaz)
+    if result.resolved:
+        return result
+    return resolve_semantic(result, gaz, index, thresholds, filter_mode)

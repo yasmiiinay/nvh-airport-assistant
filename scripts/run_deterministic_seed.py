@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from configs.settings import SETTINGS
-from evaluation.retrieval_metrics import decision_rates, stage_firing_counts
+from evaluation.retrieval_metrics import decision_rates, judge_outcome, stage_firing_counts
 from src.entities import load_gazetteers
 from src.foundation_audit import load_queries
 from src.normalizer import rule_table_markdown, rule_table_rows
@@ -53,18 +53,8 @@ def verdict(row: dict, result, gaz) -> tuple[str, str]:
             else:
                 note.append(f"hints {hints['category_hints']} (no target record; expected {expected})")
         return "handed_to_semantic", "; ".join(note) or "no hints"
-    record_ok = (result.matched_record_id == target
-                 or ("grounded_negative" in result.flags and target in result.candidates)
-                 or (target is None and result.matched_record_id is None))
-    decision_ok = result.decision == expected
-    if record_ok and decision_ok:
-        return "correct", ""
-    detail = []
-    if not decision_ok:
-        detail.append(f"decision {result.decision} != expected {expected}")
-    if not record_ok:
-        detail.append(f"record {result.matched_record_id} != target {target}")
-    return "wrong", "; ".join(detail)
+    return judge_outcome(expected, target, result.decision, result.matched_record_id,
+                         result.candidates, result.flags)
 
 
 if __name__ == "__main__":
