@@ -80,8 +80,13 @@ LOADERS = {
 }
 
 
+# every loader below runs on the CPU on purpose (the Space has no GPU and the
+# MacBook's MPS path is not part of the design); the row records both what
+# torch could use and what the loader actually used
+DEVICE_USED = "cpu"
+
+
 def detect_device() -> str:
-    try:
         import torch
         mps = getattr(torch.backends, "mps", None)
         return "mps" if (mps and torch.backends.mps.is_available()) else "cpu"
@@ -107,7 +112,8 @@ def benchmark(name: str, warmup: int, runs: int) -> dict:
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": name,
-        "device": detect_device(),
+        "device_available": detect_device(),
+        "device_used": DEVICE_USED,
         "python": platform.python_version(),
         "machine": platform.machine(),
         "warmup_runs": warmup,

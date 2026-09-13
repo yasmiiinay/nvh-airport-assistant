@@ -410,10 +410,30 @@ wait-time claims, the redirect content, the grounded-negative and
 terminal-mismatch wording, both guards, and the score disclaimer on a
 semantic answer.
 
-## F. State at closure
+## F. MacBook run (environment of record)
 
-`python -m pytest tests`: **105 passed** (Linux, Python 3.11; MacBook run
-pending). Audit ALL 11 CHECKS PASS. Held-out set frozen at `396ccd7` and
+Run by the student on 13 September 2026 (macOS arm64, Python 3.14.3,
+pinned venv, local model copy): **105 passed**; dev run 35/43 and held-out
+run 24/36 with the same per-query decisions, scores and margins as the
+workspace run, so the two environments agree query for query. Benchmark
+rows (CPU; torch reports MPS as available but the loaders use the CPU on
+purpose, which the harness now records in separate `device_available` and
+`device_used` columns): MiniLM first load 2.61 s, subsequent constructions
+0.022 s median, RSS 477 MB after load (23 MB before); encoding three
+queries 7.5 ms median, about 2.5 ms per query. The workspace figures in §9
+(3.99 s, 0.042 s, 793 MB, 3.5 ms per query) are the Linux comparison
+column.
+
+Post-revision grid note: after the exemplar revision the dev grid's
+zero-wrong-record maximum moves to `tau_high` 0.55 (14/21) while the chosen
+0.50 reads 13/21 with q004 as its one wrong-record answer. The thresholds
+were not changed; the protocol allowed one declared revision and no
+further tuning, and a one-query difference on 21 queries is not evidence.
+
+## G. State at closure
+
+`python -m pytest tests`: **105 passed** on the MacBook and in the
+workspace. Audit ALL 11 CHECKS PASS. Held-out set frozen at `396ccd7` and
 untouched since. Open items carried forward: the cross-terminal
 grounded-negative defect (h024); out-of-scope queries that land just above
 `tau_low` (h023, h030) and the one answered from a neighbouring category
